@@ -5,3 +5,6 @@ __pycache__
 .history
 .vscode
 mapreader.egg-info
+examples/classification_one_inch_maps_001/**/*.PNG
+examples/classification_one_inch_maps_001/**/*.kml
+examples/classification_one_inch_maps_001/**/*.geojson
