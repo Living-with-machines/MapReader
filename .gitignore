@@ -5,3 +5,6 @@ __pycache__
 .history
 .vscode
 mapreader.egg-info
+examples/postproc/credentials.json
+examples/postproc/authorized_user.json
+examples/postproc/token.pickle
