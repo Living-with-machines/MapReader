@@ -30,7 +30,7 @@ def test_minmax_latlon(sheet_downloader, capfd):
     sd = sheet_downloader
     sd.get_minmax_latlon()
     out, _ = capfd.readouterr()
-    assert out == "[INFO] Min lat: 51.49344796, max lat: 54.75000003 \n[INFO] Min lon: -5.40999994, max lon: -0.16093917\n"
+    assert out == "[INFO] Min lat: 51.49506473014369, max lat: 54.76267040025495 \n[INFO] Min lon: -5.42724609375, max lon: -0.17578125\n"
 
 def test_crs(sheet_downloader):
     sd = sheet_downloader
@@ -54,22 +54,23 @@ def test_query_by_wfs_ids(sheet_downloader):
 
 def test_query_by_polygon(sheet_downloader):
     sd = sheet_downloader
-    polygon = Polygon([[-4.79999994, 54.48000003], [-5.39999994, 54.48000003], [-5.40999994, 54.74000003], [-4.80999994, 54.75000003], [-4.79999994, 54.48000003]]) #should match to features[0]
+    polygon = Polygon([(-5.361328125, 54.76267040025495), (-5.361328125, 54.72462019492448), (-5.42724609375, 54.72462019492448), (-5.42724609375, 54.76267040025495), (-5.361328125, 54.76267040025495)]) #should match to features[0]
     sd.query_map_sheets_by_polygon(polygon) #test mode = 'within'
     assert sd.polygons == True
     assert len(sd.found_queries) == 1
     assert sd.found_queries[0] == sd.features[0]
-    sd.query_map_sheets_by_polygon(polygon, mode = 'intersects') #test mode = 'intersects'
+    extended_polygon = Polygon([(-4.81201171875, 54.72462019492448), (-4.81201171875, 54.76267040025495), (-5.42724609375, 54.76267040025495), (-5.42724609375, 54.72462019492448), (-4.81201171875, 54.72462019492448)])
+    sd.query_map_sheets_by_polygon(extended_polygon, mode = 'intersects') #test mode = 'intersects'
     assert len(sd.found_queries) == 2
     assert sd.found_queries == sd.features[:2]
-    another_polygon = Polygon([[-0.23045502, 51.49344796], [-0.23053988, 51.52237709], [-0.16097999, 51.52243594], [-0.16093917, 51.49350674], [-0.23045502, 51.49344796]]) #should match to features[3]
+    another_polygon = Polygon([(-0.17578125, 51.53608560178474), (-0.17578125, 51.49506473014369), (-0.24169921875, 51.49506473014369), (-0.24169921875, 51.53608560178474), (-0.17578125, 51.53608560178474)]) #should match to features[3]
     sd.query_map_sheets_by_polygon(another_polygon, append=True) # test append
     assert len(sd.found_queries) == 3
     assert sd.found_queries[2] == sd.features[3]
 
 def test_query_by_coords(sheet_downloader):
     sd = sheet_downloader
-    sd.query_map_sheets_by_coordinates((-4.8, 54.5))
+    sd.query_map_sheets_by_coordinates((-4.8, 54.73))
     assert sd.polygons == True
     assert len(sd.found_queries) == 1
     assert sd.found_queries[0] == sd.features[1]
@@ -79,12 +80,12 @@ def test_query_by_coords(sheet_downloader):
 
 def test_query_by_line(sheet_downloader):
     sd = sheet_downloader
-    line = LineString([(-5.4, 54.5), (-4.8, 54.5)])
+    line = LineString([(-5.4, 54.73), (-4.8, 54.73)])
     sd.query_map_sheets_by_line(line)
     assert sd.polygons == True
     assert len(sd.found_queries) == 2
     assert sd.found_queries == sd.features[:2]
-    another_line = LineString([(-0.2, 51.5),(-0.21,51.6)])
+    another_line = LineString([(-0.2, 51.4),(-0.21,51.6)])
     sd.query_map_sheets_by_line(another_line, append = True) # test append
     assert len(sd.found_queries) == 3
     assert sd.found_queries[2] == sd.features[3]
@@ -105,7 +106,7 @@ def test_query_by_string(sheet_downloader):
 
 def test_download_all(sheet_downloader, tmp_path):
     sd = sheet_downloader
-    sd.get_grid_bb(10)
+    sd.get_grid_bb(14)
     assert sd.grid_bbs == True
     maps_path= tmp_path / "test_maps/"
     metadata_fname="test_metadata.csv"
@@ -121,7 +122,7 @@ def test_download_all(sheet_downloader, tmp_path):
 
 def test_download_by_wfs_ids(sheet_downloader, tmp_path):
     sd = sheet_downloader
-    sd.get_grid_bb(10)
+    sd.get_grid_bb(14)
     maps_path=tmp_path / "test_maps/"
     metadata_fname="test_metadata.csv"
     sd.download_map_sheets_by_wfs_ids(1, maps_path, metadata_fname) #test single wfs_id
@@ -140,8 +141,8 @@ def test_download_by_wfs_ids(sheet_downloader, tmp_path):
 
 def test_download_by_polygon(sheet_downloader, tmp_path):
     sd = sheet_downloader
-    sd.get_grid_bb(10)
-    polygon = Polygon([[-4.79999994, 54.48000003], [-5.39999994, 54.48000003], [-5.40999994, 54.74000003], [-4.80999994, 54.75000003], [-4.79999994, 54.48000003]]) #should match to features[0]
+    sd.get_grid_bb(14)
+    polygon = Polygon([(-5.361328125, 54.76267040025495), (-5.361328125, 54.72462019492448), (-5.42724609375, 54.72462019492448), (-5.42724609375, 54.76267040025495), (-5.361328125, 54.76267040025495)]) #should match to features[0]
     maps_path=tmp_path / "test_maps/"
     metadata_fname="test_metadata.csv"    
     sd.download_map_sheets_by_polygon(polygon, maps_path, metadata_fname) #test mode = 'within'
@@ -152,7 +153,8 @@ def test_download_by_polygon(sheet_downloader, tmp_path):
     assert len(csv) == 2   
     assert csv[0] == '\tname\turl\tcoordinates\tcrs\tpublished_date\tgrid_bb\n'
     assert csv[1].startswith('0\tmap_74487492.png')    
-    sd.download_map_sheets_by_polygon(polygon, maps_path, metadata_fname, mode = 'intersects') #test mode = 'intersects', now 2 maps
+    extended_polygon = Polygon([(-4.81201171875, 54.72462019492448), (-4.81201171875, 54.76267040025495), (-5.42724609375, 54.76267040025495), (-5.42724609375, 54.72462019492448), (-4.81201171875, 54.72462019492448)])
+    sd.download_map_sheets_by_polygon(extended_polygon, maps_path, metadata_fname, mode = 'intersects') #test mode = 'intersects', now 2 maps
     assert os.path.exists(f"{maps_path}/map_74488550.png")
     with open(f"{maps_path}/{metadata_fname}") as f:
         csv = f.readlines()
@@ -160,10 +162,10 @@ def test_download_by_polygon(sheet_downloader, tmp_path):
 
 def test_download_by_coords(sheet_downloader, tmp_path):
     sd = sheet_downloader
-    sd.get_grid_bb(10)
+    sd.get_grid_bb(14)
     maps_path=tmp_path / "test_maps/"
     metadata_fname="test_metadata.csv"    
-    sd.download_map_sheets_by_coordinates((-4.8, 54.5), maps_path, metadata_fname)
+    sd.download_map_sheets_by_coordinates((-4.8, 54.73), maps_path, metadata_fname)
     assert os.path.exists(f"{maps_path}/map_74488550.png")
     assert os.path.exists(f"{maps_path}/{metadata_fname}")
     with open(f"{maps_path}/{metadata_fname}") as f:
@@ -174,10 +176,10 @@ def test_download_by_coords(sheet_downloader, tmp_path):
 
 def test_download_by_line(sheet_downloader, tmp_path):
     sd = sheet_downloader
-    sd.get_grid_bb(10)
+    sd.get_grid_bb(14)
     maps_path=tmp_path / "test_maps/"
     metadata_fname="test_metadata.csv"
-    line = LineString([(-5.4, 54.5), (-4.8, 54.5)])
+    line = LineString([(-5.4, 54.73), (-4.8, 54.73)])
     sd.download_map_sheets_by_line(line, maps_path, metadata_fname)
     assert os.path.exists(f"{maps_path}/map_74488550.png")
     assert os.path.exists(f"{maps_path}/{metadata_fname}")
@@ -189,7 +191,7 @@ def test_download_by_line(sheet_downloader, tmp_path):
 
 def test_download_by_string(sheet_downloader, tmp_path):
     sd = sheet_downloader
-    sd.get_grid_bb(10)
+    sd.get_grid_bb(14)
     maps_path=tmp_path / "test_maps/"
     metadata_fname="test_metadata.csv"
     sd.download_map_sheets_by_string("Westminster",["properties","PARISH"], maps_path, metadata_fname) #test w/ keys list
@@ -205,11 +207,11 @@ def test_download_by_string(sheet_downloader, tmp_path):
 
 def test_download_by_queries(sheet_downloader, tmp_path):
     sd = sheet_downloader
-    sd.get_grid_bb(10)
+    sd.get_grid_bb(14)
     maps_path=tmp_path / "test_maps/"
     metadata_fname="test_metadata.csv"    
     sd.query_map_sheets_by_wfs_ids(131)
-    sd.query_map_sheets_by_coordinates((-4.8, 54.5), append=True)
+    sd.query_map_sheets_by_coordinates((-4.8, 54.73), append=True)
     assert len(sd.found_queries) == 2
     sd.download_map_sheets_by_queries(maps_path, metadata_fname)
     assert os.path.exists(f"{maps_path}/map_102352861.png")
@@ -240,7 +242,7 @@ def test_query_by_polygon_errors(sheet_downloader):
     sd = sheet_downloader
     with pytest.raises(ValueError, match="pass polygon as shapely.geometry.Polygon"):
         sd.query_map_sheets_by_polygon([1,2])
-    polygon = Polygon([[-4.79999994, 54.48000003], [-5.39999994, 54.48000003], [-5.40999994, 54.74000003], [-4.80999994, 54.75000003], [-4.79999994, 54.48000003]]) #should match to features[0]
+    polygon = Polygon([(-5.361328125, 54.76267040025495), (-5.361328125, 54.72462019492448), (-5.42724609375, 54.72462019492448), (-5.42724609375, 54.76267040025495), (-5.361328125, 54.76267040025495)]) #should match to features[0]
     with pytest.raises(NotImplementedError, match='``mode="within"`` or ``mode="intersects"``'):
         sd.query_map_sheets_by_polygon(polygon, mode ="fake mode")
 
@@ -265,7 +267,7 @@ def test_query_by_string_errors(sheet_downloader):
 
 def test_download_by_wfs_ids_errors(sheet_downloader, tmp_path):
     sd = sheet_downloader
-    sd.get_grid_bb(10)
+    sd.get_grid_bb(14)
     maps_path=tmp_path / "test_maps/"
     metadata_fname="test_metadata.csv"
     with pytest.raises(ValueError, match = "No map sheets"):
@@ -273,7 +275,7 @@ def test_download_by_wfs_ids_errors(sheet_downloader, tmp_path):
 
 def test_download_by_polygon_errors(sheet_downloader, tmp_path):
     sd = sheet_downloader
-    sd.get_grid_bb(10)
+    sd.get_grid_bb(14)
     polygon = Polygon([[0,1], [1,2], [2,3], [3,4], [0,1]])
     maps_path=tmp_path / "test_maps/"
     metadata_fname="test_metadata.csv"    
@@ -282,7 +284,7 @@ def test_download_by_polygon_errors(sheet_downloader, tmp_path):
 
 def test_download_by_coords_errors(sheet_downloader, tmp_path):
     sd = sheet_downloader
-    sd.get_grid_bb(10)
+    sd.get_grid_bb(14)
     maps_path=tmp_path / "test_maps/"
     metadata_fname="test_metadata.csv"    
     with pytest.raises(ValueError, match = "out of map metadata bounds"):
@@ -290,7 +292,7 @@ def test_download_by_coords_errors(sheet_downloader, tmp_path):
 
 def test_download_by_line(sheet_downloader, tmp_path):
     sd = sheet_downloader
-    sd.get_grid_bb(10)
+    sd.get_grid_bb(14)
     maps_path=tmp_path / "test_maps/"
     metadata_fname="test_metadata.csv"
     line = LineString([(0,1), (2,3)])
@@ -299,7 +301,7 @@ def test_download_by_line(sheet_downloader, tmp_path):
 
 def test_download_by_queries_errors(sheet_downloader, tmp_path):
     sd = sheet_downloader
-    sd.get_grid_bb(10)
+    sd.get_grid_bb(14)
     maps_path=tmp_path / "test_maps/"
     metadata_fname="test_metadata.csv"    
     with pytest.raises(ValueError, match="No query results"):
