@@ -69,19 +69,19 @@ What are the inputs and outputs of each stage in the MapReader pipeline?
 Download
 ^^^^^^^^^
 .. image:: figures/in_out_download.png
-    :width: 400px
+    :width: 600px
 
 Load
 ^^^^^
 .. image:: figures/in_out_load.png
-    :width: 400px
+    :width: 600px
 
 Annotate
 ^^^^^^^^^
 .. image:: figures/in_out_annotate.png
-    :width: 400px
+    :width: 600px
 
 Classify (Train and Predict)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .. image:: figures/in_out_classify.png
-    :width: 400px
+    :width: 600px
