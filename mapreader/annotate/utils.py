@@ -27,6 +27,9 @@ from PIL import Image
 
 from mapreader import load_patches, loader
 
+# PIL.Image ignore decompression bomb warnings
+Image.MAX_IMAGE_PIXELS = None
+
 
 def display_record(record: tuple[str, str, str, int, int]) -> None:
     """

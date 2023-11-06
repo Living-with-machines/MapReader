@@ -15,6 +15,8 @@ logger = logging.getLogger(__name__)
 DEFAULT_OUT_FOLDER = "./"
 DEFAULT_IMG_STORE_FORMAT = ("png", "PNG")
 
+# PIL.Image ignore decompression bomb warnings
+Image.MAX_IMAGE_PIXELS = None
 
 class TileMerger:
     def __init__(

@@ -16,6 +16,9 @@ from torchvision.transforms import Compose
 
 from .datasets import PatchDataset
 
+# PIL.Image ignore decompression bomb warnings
+Image.MAX_IMAGE_PIXELS = None
+
 
 class AnnotationsLoader:
     def __init__(self):

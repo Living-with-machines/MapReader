@@ -23,6 +23,8 @@ except ImportError:
     )
     parhugin_installed = False
 
+# PIL.Image ignore decompression bomb warnings
+Image.MAX_IMAGE_PIXELS = None
 
 class PatchDataset(Dataset):
     def __init__(

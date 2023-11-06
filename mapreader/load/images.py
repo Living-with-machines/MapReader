@@ -32,6 +32,8 @@ import geopandas as geopd  # noqa: E402
 # Ignore warnings
 warnings.filterwarnings("ignore")
 
+# PIL.Image ignore decompression bomb warnings
+Image.MAX_IMAGE_PIXELS = None
 
 class MapImages:
     """
