@@ -59,17 +59,15 @@ def reproject_geo_info(image_path, target_crs="EPSG:4326", calc_size_in_m=False)
     tiff_shape, tiff_proj, tiff_coord = extractGeoInfo(image_path)
 
     # Coordinate transformation: proj1 ---> proj2
-    transformer = Transformer.from_crs(tiff_proj, target_crs)
-    ymin, xmin = transformer.transform(tiff_coord[0], tiff_coord[1])
-    ymax, xmax = transformer.transform(tiff_coord[2], tiff_coord[3])
-    coord = (xmin, ymin, xmax, ymax)
-
+    transformer = Transformer.from_crs(tiff_proj, target_crs, always_xy=True)
+    coord = transformer.transform_bounds(*tiff_coord)
     print(f"[INFO] New CRS: {target_crs}")
     print("[INFO] Reprojected coordinates: {:.4f} {:.4f} {:.4f} {:.4f}".format(*coord))
 
     height, width, _ = tiff_shape
 
     # Calculate the size of image in meters
+    xmin, ymin, xmax, ymax = coord
     if calc_size_in_m:
         if calc_size_in_m in ["geodesic", "gd"]:
             bottom = geodesic((ymin, xmin), (ymin, xmax)).meters

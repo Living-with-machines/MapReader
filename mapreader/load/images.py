@@ -2217,15 +2217,8 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
             tiff_proj = tiff_src.crs.to_string()
             # Coordinate transformation: proj1 ---> proj2
             # tiff is "lat, lon" instead of "x, y"
-            transformer = Transformer.from_crs(tiff_proj, target_crs)
-            ymin, xmin = transformer.transform(
-                tiff_src.bounds.left, tiff_src.bounds.bottom
-            )
-            ymax, xmax = transformer.transform(
-                tiff_src.bounds.right, tiff_src.bounds.top
-            )
-            # New projected coordinates
-            coords = (xmin, ymin, xmax, ymax)
+            transformer = Transformer.from_crs(tiff_proj, target_crs, always_xy=True)
+            coords = transformer.transform_bounds(*tiff_src.bounds)
             self.parents[image_id]["coordinates"] = coords
             self.parents[image_id]["crs"] = target_crs
 

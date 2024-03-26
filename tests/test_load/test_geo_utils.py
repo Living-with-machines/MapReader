@@ -38,7 +38,7 @@ def test_reproject(sample_dir):
     assert new_crs == "EPSG:4326"
     assert reprojected_coord == approx((-0.061, 51.6142, -0.0610, 51.614), rel=1e-2)
     print(size_in_m)
-    assert size_in_m == approx((0.5904, 0.6209, 0.594, 0.6209), rel=1e-2)
+    assert size_in_m == approx((0.62, 0.62, 0.62, 0.62), rel=1e-2)
 
 
 def test_versus_loader(sample_dir):
