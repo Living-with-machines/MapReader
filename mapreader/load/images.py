@@ -990,6 +990,7 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
         output_format: str | None = "png",
         rewrite: bool | None = False,
         verbose: bool | None = False,
+        overlap: int = 0,
     ) -> None:
         """
         Patchify all images in the specified ``tree_level`` and (if ``add_to_parents=True``) add the patches to the MapImages instance's ``images`` dictionary.
@@ -1024,6 +1025,8 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
         verbose : bool, optional
             If True, progress updates will be printed throughout, by default
             ``False``.
+        overlap : int, optional
+            Fractional overlap between patches, by default ``0``.
 
         Returns
         -------
@@ -1088,6 +1091,7 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
                     output_format=output_format,
                     rewrite=rewrite,
                     verbose=verbose,
+                    overlap=overlap,
                 )
 
     def _patchify_by_pixel(
@@ -1100,6 +1104,7 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
         output_format: str | None = "png",
         rewrite: bool | None = False,
         verbose: bool | None = False,
+        overlap: int | None = 0,
     ):
         """Patchify one image and (if ``add_to_parents=True``) add the patch to the MapImages instance's ``images`` dictionary.
 
@@ -1123,6 +1128,8 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
         verbose : bool, optional
             If True, progress updates will be printed throughout, by default
             ``False``.
+        overlap : int, optional
+            Fractional overlap between patches, by default ``0``.
         """
         tree_level = self._get_tree_level(image_id)
 
@@ -1140,15 +1147,14 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
 
         height, width = img.height, img.width
 
-        for x in range(0, width, patch_size):
-            for y in range(0, height, patch_size):
+        x = 0
+        while x < width:
+            y = 0
+            while y < height:
                 max_x = min(x + patch_size, width)
                 max_y = min(y + patch_size, height)
 
-                min_x = x
-                min_y = y
-
-                patch_id = f"patch-{min_x}-{min_y}-{max_x}-{max_y}-#{image_id}#.{output_format}"
+                patch_id = f"patch-{x}-{y}-{max_x}-{max_y}-#{image_id}#.{output_format}"
                 patch_path = os.path.join(path_save, patch_id)
                 patch_path = os.path.abspath(patch_path)
 
@@ -1158,7 +1164,7 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
                     )
 
                 else:
-                    patch = img.crop((min_x, min_y, max_x, max_y))
+                    patch = img.crop((x, y, max_x, max_y))
                     if max_x == width:
                         patch = ImageOps.pad(
                             patch, (patch_size, patch.height), centering=(0, 0)
@@ -1181,10 +1187,14 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
                         image_path=patch_path,
                         parent_path=parent_path,
                         tree_level="patch",
-                        pixel_bounds=(min_x, min_y, max_x, max_y),
+                        pixel_bounds=(x, y, max_x, max_y),
                     )
                     self._add_patch_coords_id(patch_id)
                     self._add_patch_polygons_id(patch_id)
+
+                overlap_pixels = int(patch_size * overlap)
+                y = y + patch_size - overlap_pixels
+            x = x + patch_size - overlap_pixels
 
     def _patchify_by_pixel_square(
         self,
