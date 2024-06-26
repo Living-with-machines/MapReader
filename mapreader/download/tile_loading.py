@@ -10,8 +10,10 @@ from tqdm import tqdm
 
 from .data_structures import GridBoundingBox, GridIndex
 
+# Set up logging
 logger = logging.getLogger(__name__)
 
+# Default values (constants)
 DEFAULT_TEMP_FOLDER = "_tile_cache/"  # must end with a "/"
 DEFAULT_IMG_DOWNLOAD_FORMAT = "png"
 

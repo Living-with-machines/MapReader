@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import copy
+import logging
 import os
 import random
 import socket
@@ -28,6 +29,9 @@ from .datasets import PatchDataset
 # import pickle
 # from tqdm.autonotebook import tqdm
 # from torch.nn.modules.module import _addindent
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 
 class ClassifierContainer:
@@ -147,7 +151,7 @@ class ClassifierContainer:
             self.labels_map = labels_map
 
             # set up model and move to device
-            print("[INFO] Initializing model.")
+            logger.info("Initializing model.")
             if isinstance(model, nn.Module):
                 self.model = model.to(self.device)
                 self.input_size = input_size
@@ -733,12 +737,12 @@ Use ``initialize_optimizer`` or ``add_optimizer`` to define one."  # noqa
                 print_info_batch_freq=print_info_batch_freq,
             )
         except KeyboardInterrupt:
-            print("[INFO] Exiting...")
+            logger.info("Exiting...")
             if os.path.isfile(self.tmp_save_filename):
                 print(f'[INFO] Loading "{self.tmp_save_filename}" as model.')
                 self.load(self.tmp_save_filename, remove_after_load=remove_after_load)
             else:
-                print("[INFO] No checkpoint file found - model has not been updated.")
+                logger.info("No checkpoint file found - model has not been updated.")
 
     def train_core(
         self,
@@ -834,7 +838,7 @@ Use ``initialize_optimizer`` or ``add_optimizer`` to define one."  # noqa
                 print(
                     "[WARNING] Could not import ``SummaryWriter`` from torch.utils.tensorboard"  # noqa
                 )
-                print("[WARNING] Continuing without tensorboard.")
+                logger.warning("Continuing without tensorboard.")
                 tensorboard_path = None
 
         start_epoch = self.last_epoch + 1
@@ -1812,7 +1816,7 @@ Output will show batch number {num_batches}.'
             The number of worker threads to use for loading data, by default 0.
         """
         if sampler and shuffle:
-            print("[INFO] ``sampler`` is defined so train dataset will be unshuffled.")
+            logger.info("``sampler`` is defined so train dataset will be unshuffled.")
 
         dataloader = DataLoader(
             dataset,

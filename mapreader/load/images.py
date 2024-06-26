@@ -5,6 +5,7 @@ try:
 except ImportError:
     pass
 
+import logging
 import os
 import random
 import re
@@ -36,6 +37,9 @@ import geopandas as geopd  # noqa: E402
 
 # Ignore warnings
 warnings.filterwarnings("ignore")
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 
 class MapImages:
@@ -518,7 +522,7 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
             self._add_shape_id(image_id=image_id)
 
     def add_coords_from_grid_bb(self, verbose: bool = False) -> None:
-        print("[INFO] Adding coordinates, tree level: parent")
+        logger.info("Adding coordinates, tree level: parent")
 
         parent_list = self.list_parents()
 
@@ -552,7 +556,7 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
         pixel-wise delta longitude (``dlon``) and delta latitude (``dlat``)
         for the image and adds the data to it.
         """
-        print("[INFO] Add coord-increments, tree level: parent")
+        logger.info("Add coord-increments, tree level: parent")
 
         parent_list = self.list_parents()
 

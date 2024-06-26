@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import shutil
@@ -20,6 +21,9 @@ from tqdm.auto import tqdm
 from .downloader_utils import get_grid_bb_from_polygon, get_polygon_from_grid_bb
 from .tile_loading import DEFAULT_TEMP_FOLDER, TileDownloader
 from .tile_merging import TileMerger
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 
 class SheetDownloader:
@@ -504,7 +508,7 @@ class SheetDownloader:
             self.get_polygons()
 
         if len(self.found_queries) == 0:
-            print("[INFO] No query results found/saved.")
+            logger.info("No query results found/saved.")
         else:
             divider = 14 * "="
             print(f"{divider}\nQuery results:\n{divider}")

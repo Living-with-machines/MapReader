@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import pathlib
 
@@ -30,6 +31,9 @@ if adet.__version__ != "0.2.0-dptext-detr":
     raise ImportError(
         "Please install DPText-DETR from the following link: https://github.com/rwood-97/DPText-DETR"
     )
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 
 class DPTextDETRRunner:
@@ -290,7 +294,7 @@ class DPTextDETRRunner:
                 raise ValueError("[ERROR] Please provide a `parent_df`")
 
         if self.parent_predictions == {}:
-            print("[INFO] Converting patch pixel bounds to parent pixel bounds.")
+            logger.info("Converting patch pixel bounds to parent pixel bounds.")
             _ = self.convert_to_parent_pixel_bounds()
 
         for parent_id, prediction in self.parent_predictions.items():

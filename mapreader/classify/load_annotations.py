@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
+import logging
 import os
 from decimal import Decimal
 from typing import Callable
@@ -15,6 +16,9 @@ from torch.utils.data import DataLoader, Sampler, WeightedRandomSampler
 from torchvision.transforms import Compose
 
 from .datasets import PatchContextDataset, PatchDataset
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 
 class AnnotationsLoader:
@@ -452,7 +456,7 @@ Please check your image paths and update them if necessary.'
             if user_input_ids.lower() in ["exit", "end", "stop"]:
                 break
 
-        print("[INFO] Exited.")
+        logger.info("Exited.")
 
     def show_sample(self, label_to_show: str, num_samples: int | None = 9) -> None:
         """Show a random sample of images with the specified label (tar_label).
@@ -629,7 +633,7 @@ Please check your image paths and update them if necessary.'
         self.datasets = datasets
         self.dataset_sizes = dataset_sizes
 
-        print("[INFO] Number of annotations in each set:")
+        logger.info("Number of annotations in each set:")
         for set_name in datasets.keys():
             print(f"    - {set_name}:   {dataset_sizes[set_name]}")
 
@@ -761,7 +765,7 @@ Please check your image paths and update them if necessary.'
 
         if isinstance(sampler, str):
             if sampler == "default":
-                print("[INFO] Using default sampler.")
+                logger.info("Using default sampler.")
                 sampler = self._define_sampler()
             else:
                 raise ValueError(
@@ -769,7 +773,7 @@ Please check your image paths and update them if necessary.'
                 )
 
         if sampler and shuffle:
-            print("[INFO] ``sampler`` is defined so train dataset will be un-shuffled.")
+            logger.info("``sampler`` is defined so train dataset will be un-shuffled.")
 
         dataloaders = {
             set_name: DataLoader(

@@ -3,6 +3,7 @@ from __future__ import annotations
 import functools
 import hashlib
 import json
+import logging
 import os
 import random
 import string
@@ -20,12 +21,15 @@ from PIL import Image, ImageOps
 
 from ..load.loader import load_patches
 
+# Ignore warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 
 _CENTER_LAYOUT = widgets.Layout(
     display="flex", flex_flow="column", align_items="center"
 )
 
+# Set up logging
+logger = logging.getLogger(__name__)
 
 class Annotator:
     """
@@ -218,7 +222,7 @@ class Annotator:
 
         # Test for existing patch annotation file
         if os.path.exists(annotations_file):
-            print("[INFO] Loading existing patch annotations.")
+            logger.info("Loading existing patch annotations.")
             patch_df = self._load_annotations(
                 patch_df=patch_df,
                 annotations_file=annotations_file,
