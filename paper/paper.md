@@ -69,7 +69,7 @@ MapReader makes it possible to ask questions of thousands of digitized maps at a
 
 # Related Work
 
-MapReader is among the first end-to-end pipeline for processing historical maps and other images that was designed to lower barriers to experimenting with computer vision in answering research questions about large image datasets. Other projects are emerging which are performing similar research tasks with the visual content in historical map collections [@Petitpierre; @Combes], and of course other tools, like the Distant Viewing Toolkit [@Arnold], address similar needs for other kinds of media. As part of a collaboration between Machines Reading Maps and the David Rumsey Historical Map Collection, the Knowledge Computing Lab released mapKurator [@mapkurator], which takes map image input and creates geojson files of all text on each map.
+MapReader is among the first end-to-end pipeline for processing historical maps and other images that was designed to lower barriers to experimenting with computer vision in answering research questions about large image datasets. Other projects are emerging which are performing similar research tasks with the visual content in historical map collections [@Petitpierre; @Combes], and of course other tools, like the Distant Viewing Toolkit [@Arnold], address similar needs for other kinds of media. As part of a collaboration between Machines Reading Maps and the David Rumsey Historical Map Collection, the Knowledge Computing Lab released mapKurator [@mapkurator], which takes map image input and creates geojson files of all text on each map. (MapReader now also incorporates this 'text spotting' task in addition to the patch classification task.)
 
 
 # Documentation
@@ -96,7 +96,7 @@ Through its conceptual approach, modular structure, documentation, and worked ex
 
 # Acknowledgements
 
-This work was supported by Data/Culture (AHRC grant AH/Y00745X/1), Living with Machines (AHRC grant AH/S01179X/1), and The Alan Turing Institute (EPSRC grant EP/N510129/1). Living with Machines, funded by the UK Research and Innovation (UKRI) Strategic Priority Fund, was a multidisciplinary collaboration delivered by the Arts and Humanities Research Council (AHRC), with The Alan Turing Institute, the British Library and the Universities of Cambridge, East Anglia, Exeter, and Queen Mary University of London. Maps and their metadata in MapReader are reproduced with the permission of the National Library of Scotland (https://maps.nls.uk/index.html). We also wish to thank participants in events in 2023 who provided feedback on using MapReader.
+This work was supported by Data/Culture (AHRC grant AH/Y00745X/1), Living with Machines (AHRC grant AH/S01179X/1), and The Alan Turing Institute (EPSRC grant EP/N510129/1). Living with Machines, funded by the UK Research and Innovation (UKRI) Strategic Priority Fund, was a multidisciplinary collaboration delivered by the Arts and Humanities Research Council (AHRC), with The Alan Turing Institute, the British Library and the Universities of Cambridge, East Anglia, Exeter, and Queen Mary University of London. Maps and their metadata in MapReader are reproduced with the permission of the National Library of Scotland (https://maps.nls.uk/index.html). We also wish to thank participants in events in 2023 and 2024 who provided feedback on using MapReader.
 
 # Contribution Statement
 
