@@ -623,7 +623,7 @@ def prepare_annotation(
     )
 
     if len(data2annotate) == 0:
-        print("No image to annotate!")
+        logger.info("No image to annotate!")
     else:
         annotation = annotation_interface(
             data2annotate,

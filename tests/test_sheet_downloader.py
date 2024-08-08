@@ -480,6 +480,7 @@ def test_download_by_wfs_ids(sheet_downloader, tmp_path, mock_response):
     assert df.loc[1, "name"] == "map_101602038.png"
 
 
+
 def test_download_same_image_names(sheet_downloader, tmp_path, caplog):
     caplog.set_level(logging.INFO)
     sd = sheet_downloader

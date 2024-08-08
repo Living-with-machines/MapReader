@@ -65,7 +65,7 @@ class SheetDownloader:
             with open(metadata_path) as f:
                 self.metadata = json.load(f)
                 self.features = self.metadata["features"]
-                print(self.__str__())
+                logger.info(self.__str__())
 
         else:
             raise ValueError("[ERROR] Metadata file not found.")

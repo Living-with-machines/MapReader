@@ -100,7 +100,7 @@ def reproject_geo_info(image_path, target_crs="EPSG:4326", calc_size_in_m=False)
         logger.info(
             f"Size in meters of left/bottom/right/top: {left:.2f}/{bottom:.2f}/{right:.2f}/{top:.2f}"
         )
-        print(
+        logger.info(
             f"Each pixel is ~{mean_pixel_height:.3f} X {mean_pixel_width:.3f} meters (height x width)."
         )  # noqa
 

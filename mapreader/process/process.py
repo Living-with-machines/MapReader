@@ -177,7 +177,7 @@ def preprocess(
 
             cropped = True
         except Exception as e:
-            print(e)
+            logger.exception(e)
 
     # if not cropped correctly, clean up and exit
     if not cropped:
@@ -200,7 +200,7 @@ def preprocess(
         subprocess.run(gdal_command, shell=True)
         resampled = True
     except Exception as e:
-        print(e)
+        logger.exception(e)
 
     if remove_reproj_file:
         os.remove(path2save_reproj)

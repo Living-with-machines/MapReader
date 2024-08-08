@@ -847,11 +847,11 @@ Please check your image paths and update them if necessary.'
         return self.unique_labels.index(label)
 
     def __str__(self):
-        logger.info(f"Number of annotations:   {len(self.annotations)}\n")
+        print(f"[INFO] Number of annotations:   {len(self.annotations)}\n")
         if len(self.annotations) > 0:
             value_counts = self.annotations[self.label_col].value_counts()
-            logger.info(
-                f'Number of instances of each label (from column "{self.label_col}"):'
+            print(
+                f'[INFO] Number of instances of each label (from column "{self.label_col}"):'
             )
             for label, count in value_counts.items():
                 print(f"    - {label}:  {count}")

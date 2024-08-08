@@ -762,8 +762,10 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
         """
 
         if "coordinates" not in self.parents[image_id].keys():
-            logger.warning(
-                f"'coordinates' could not be found in {image_id}. Suggestion: run add_metadata or add_geo_info."
+            self._log_if_verbose(
+                f"'coordinates' could not be found in {image_id}. Suggestion: run add_metadata or add_geo_info.",
+                verbose,
+                type="warning",
             )
             return
 
@@ -800,8 +802,10 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
         parent_id = self.patches[image_id]["parent_id"]
 
         if "coordinates" not in self.parents[parent_id].keys():
-            logger.warning(
-                f"No coordinates found in  {parent_id} (parent of {image_id}). Suggestion: run add_metadata or add_geo_info."
+            self._log_if_verbose(
+                f"No coordinates found in  {parent_id} (parent of {image_id}). Suggestion: run add_metadata or add_geo_info.",
+                verbose,
+                type="warning",
             )
             return
 
@@ -875,8 +879,10 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
 
         if "coordinates" not in self.images[tree_level][image_id].keys():
             if tree_level == "parent":
-                logger.warning(
-                    f"No coordinates found for {image_id}. Suggestion: run add_metadata or add_geo_info."
+                self._log_if_verbose(
+                    f"No coordinates found for {image_id}. Suggestion: run add_metadata or add_geo_info.",
+                    verbose,
+                    type="warning",
                 )
                 return
 
@@ -884,7 +890,9 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
                 self._add_patch_coords_id(image_id, verbose)
 
         if "coordinates" in self.images[tree_level][image_id].keys():
-            logger.info(f"Reading 'coordinates' from {image_id}.")
+            self._log_if_verbose(
+                f"Reading 'coordinates' from {image_id}.", verbose, type="info"
+            )
 
             min_x, min_y, max_x, max_y = self.images[tree_level][image_id][
                 "coordinates"
@@ -966,11 +974,15 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
         mean_pixel_height = np.mean([right / height, left / height])
         mean_pixel_width = np.mean([bottom / width, top / width])
 
-        logger.info(
-            f"Size in meters of left/bottom/right/top: {left:.2f}/{bottom:.2f}/{right:.2f}/{top:.2f}"
+        self._log_if_verbose(
+            f"Size in meters of left/bottom/right/top: {left:.2f}/{bottom:.2f}/{right:.2f}/{top:.2f}",
+            verbose,
+            type="info",
         )
-        logger.info(
-            f"Each pixel is ~{mean_pixel_height:.3f} X {mean_pixel_width:.3f} meters (height x width)."
+        self._log_if_verbose(
+            f"Each pixel is ~{mean_pixel_height:.3f} X {mean_pixel_width:.3f} meters (height x width).",
+            verbose,
+            type="info",
         )  # noqa
 
         return size_in_m, mean_pixel_height, mean_pixel_width
@@ -1042,15 +1054,15 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
             image_path = self.images[tree_level][image_id]["image_path"]
 
             try:
-                full_path = print(
+                full_path = logger.info(
                     os.path.relpath(image_path)
                 )  # TODO: This looks like it won't work
             except ValueError:  # if no rel path (e.g. mounted on different drives)
-                full_path = print(
+                full_path = logger.info(
                     os.path.abspath(image_path)
                 )  # TODO: This looks like it won't work
 
-            logger.info(f"Patchifying {full_path}")
+            self._log_if_verbose(f"Patchifying {full_path}", verbose, type="info")
 
             # make sure the dir exists
             self._make_dir(path_save)
@@ -1160,7 +1172,9 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
                 patch_path = os.path.abspath(patch_path)
 
                 if os.path.isfile(patch_path) and not rewrite:
-                    logger.info(f"File already exists: {patch_path}.")
+                    self._log_if_verbose(
+                        f"File already exists: {patch_path}.", verbose, type="info"
+                    )
 
                 else:
                     patch = img.crop((x, y, max_x, max_y))
@@ -1260,11 +1274,15 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
                 patch_path = os.path.abspath(patch_path)
 
                 if os.path.isfile(patch_path) and not rewrite:
-                    logger.info(f"File already exists: {patch_path}.")
+                    self._log_if_verbose(
+                        f"File already exists: {patch_path}.", verbose, type="info"
+                    )
 
                 else:
-                    logger.info(
-                        f'Creating "{patch_id}". Number of pixels in x,y: {max_x - min_x},{max_y - min_y}.'
+                    self._log_if_verbose(
+                        f'Creating "{patch_id}". Number of pixels in x,y: {max_x - min_x},{max_y - min_y}.',
+                        verbose,
+                        type="info",
                     )
 
                     patch = img.crop((min_x, min_y, max_x, max_y))
@@ -1376,7 +1394,11 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
             parent_ids = [parent_id]
 
         for parent_id in tqdm(parent_ids):
-            logger.info(f"Calculating pixel stats for patches of image: {parent_id}")
+            self._log_if_verbose(
+                f"\nCalculating pixel stats for patches of image: {parent_id}",
+                verbose,
+                type="info",
+            )
 
             if "patches" not in self.parents[parent_id]:
                 logger.warning(f"No patches found for: {parent_id}")
@@ -2210,8 +2232,10 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
 
         # Check whether coordinates are present
         if isinstance(tiff_src.crs, type(None)):
-            logger.warning(
-                f"No coordinates found in {image_id}. Try add_metadata instead."
+            self._log_if_verbose(
+                f"No coordinates found in {image_id}. Try add_metadata instead.",
+                verbose,
+                type="warning",
             )  # noqa
             return
 
@@ -2224,6 +2248,20 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
             coords = transformer.transform_bounds(*tiff_src.bounds)
             self.parents[image_id]["coordinates"] = coords
             self.parents[image_id]["crs"] = target_crs
+
+    @staticmethod
+    def _log_if_verbose(msg: str, verbose: bool, type: str) -> None:
+        """
+        Print message if verbose is True.
+        """
+        if verbose:
+            if type == "warning":
+                logger.warning(msg)
+            elif type == "info":
+                logger.info(msg)
+            else:
+                # default to info for now (we might want to change this at some point)
+                logger.info(msg)
 
     def _get_tree_level(self, image_id: str) -> str:
         """Identify tree level of an image from image_id.
@@ -2307,19 +2345,23 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
 
         if os.path.isfile(f"{geotiff_path}"):
             if not rewrite:
-                logger.info(f"File already exists: {geotiff_path}.")
+                self._log_if_verbose(
+                    f"File already exists: {geotiff_path}.", verbose, type="info"
+                )
                 return
 
-        logger.info(f"Creating: {geotiff_path}.")
+        self._log_if_verbose(
+            f"Creating: {geotiff_path}.",
+            verbose,
+            type="info",
+        )
 
         if "shape" not in self.parents[parent_id].keys():
             self._add_shape_id(parent_id)
         height, width, channels = self.parents[parent_id]["shape"]
 
         if "coordinates" not in self.parents[parent_id].keys():
-            print(
-                self.parents[parent_id].keys()
-            )  # TODO: add logging here instead of print?
+            logger.error(self.parents[parent_id].keys())
             raise ValueError(f"[ERROR] Cannot locate coordinates for {parent_id}")
         coords = self.parents[parent_id]["coordinates"]
 
@@ -2415,10 +2457,18 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
 
         if os.path.isfile(f"{geotiff_path}"):
             if not rewrite:
-                logger.info(f"File already exists: {geotiff_path}.")
+                self._log_if_verbose(
+                    f"File already exists: {geotiff_path}.",
+                    verbose,
+                    type="info",
+                )
                 return
 
-        logger.info(f"Creating: {geotiff_path}.")
+        self._log_if_verbose(
+            f"Creating: {geotiff_path}.",
+            verbose,
+            type="info",
+        )
 
         # get shape
         if "shape" not in self.patches[patch_id].keys():
