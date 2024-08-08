@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 import copy
+import logging
 import os
 import random
-import socket
 import sys
 import time
 from collections.abc import Hashable, Iterable
@@ -28,6 +28,9 @@ from .datasets import PatchDataset
 # import pickle
 # from tqdm.autonotebook import tqdm
 # from torch.nn.modules.module import _addindent
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 
 class ClassifierContainer:
@@ -119,7 +122,7 @@ class ClassifierContainer:
             self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         else:
             self.device = device
-        print(f"[INFO] Device is set to {self.device}")
+        logger.info(f"Device is set to {self.device}")
 
         # check if loading an pre-existing object
         if load_path:
@@ -149,7 +152,7 @@ class ClassifierContainer:
             self.labels_map = labels_map
 
             # set up model and move to device
-            print("[INFO] Initializing model.")
+            logger.info("Initializing model.")
             if isinstance(model, nn.Module):
                 self.model = model.to(self.device)
                 self.input_size = input_size
@@ -173,14 +176,11 @@ class ClassifierContainer:
                 f"./tmp_checkpoints/tmp_{random.randint(0, int(1e10))}_checkpoint.pkl"
             )
 
-            # add colors for printing/logging
-            self._set_up_print_colors()
-
             # add dataloaders and labels_map
             self.dataloaders = dataloaders if dataloaders else {}
 
         for set_name, dataloader in self.dataloaders.items():
-            print(f'[INFO] Loaded "{set_name}" with {len(dataloader.dataset)} items.')
+            logger.info(f'Loaded "{set_name}" with {len(dataloader.dataset)} items.')
 
     def generate_layerwise_lrs(
         self,
@@ -439,7 +439,7 @@ Use ``initialize_optimizer`` or ``add_optimizer`` to define one."  # noqa
                     '[ERROR] At present, if passing ``criterion`` as a string, criterion can only be "cross entropy" or "ce" (cross-entropy), "bce" (binary cross-entropy) or "mse" (mean squared error).'
                 )
 
-            print(f'[INFO] Using "{criterion}" as criterion.')
+            logger.info(f'Using "{criterion}" as criterion.')
 
         elif not isinstance(criterion, nn.modules.loss._Loss):
             raise ValueError(
@@ -735,12 +735,12 @@ Use ``initialize_optimizer`` or ``add_optimizer`` to define one."  # noqa
                 print_info_batch_freq=print_info_batch_freq,
             )
         except KeyboardInterrupt:
-            print("[INFO] Exiting...")
+            logger.info("Exiting...")
             if os.path.isfile(self.tmp_save_filename):
-                print(f'[INFO] Loading "{self.tmp_save_filename}" as model.')
+                logger.info(f'Loading "{self.tmp_save_filename}" as model.')
                 self.load(self.tmp_save_filename, remove_after_load=remove_after_load)
             else:
-                print("[INFO] No checkpoint file found - model has not been updated.")
+                logger.info("No checkpoint file found - model has not been updated.")
 
     def train_core(
         self,
@@ -804,7 +804,7 @@ Use ``initialize_optimizer`` or ``add_optimizer`` to define one."  # noqa
 
         if phases is None:
             phases = ["train", "val"]
-        print(f"[INFO] Each step will pass: {phases}.")
+        logger.info(f"Each step will pass: {phases}.")
 
         for phase in phases:
             if phase not in self.dataloaders.keys():
@@ -836,10 +836,10 @@ Use ``initialize_optimizer`` or ``add_optimizer`` to define one."  # noqa
 
                 tboard_writer = SummaryWriter(tensorboard_path)
             except ImportError:
-                print(
-                    "[WARNING] Could not import ``SummaryWriter`` from torch.utils.tensorboard"  # noqa
+                logger.warning(
+                    "Could not import `SummaryWriter` from torch.utils.tensorboard"  # noqa
                 )
-                print("[WARNING] Continuing without tensorboard.")
+                logger.warning("Continuing without tensorboard.")
                 tensorboard_path = None
 
         start_epoch = self.last_epoch + 1
@@ -963,12 +963,12 @@ Use ``add_criterion`` to define one."
 
                         if phase.lower() in valid_phase_names:
                             epoch_msg += f"Loss: {loss.data:.3f}"
-                            self.cprint("[INFO]", "dred", epoch_msg)
+                            logger.info(epoch_msg)
                         elif phase.lower() in train_phase_names:
                             epoch_msg += f"Loss: {loss.data:.3f}"
-                            self.cprint("[INFO]", "dgreen", epoch_msg)
+                            logger.info(epoch_msg)
                         else:
-                            self.cprint("[INFO]", "dgreen", epoch_msg)
+                            logger.info(epoch_msg)
                     # --- END: one batch
 
                 # scheduler
@@ -1001,9 +1001,9 @@ Use ``add_criterion`` to define one."
                     epoch_msg = self._gen_epoch_msg(phase, epoch_msg)
 
                     if phase.lower() in valid_phase_names:
-                        self.cprint("[INFO]", "dred", epoch_msg + "\n")
+                        logger.info(epoch_msg)
                     else:
-                        self.cprint("[INFO]", "dgreen", epoch_msg)
+                        logger.info(epoch_msg)
 
                 # labels/confidence
                 self.pred_conf.extend(running_pred_conf)
@@ -1018,12 +1018,9 @@ Use ``add_criterion`` to define one."
 
                 if phase.lower() in valid_phase_names:
                     if epoch % tmp_file_save_freq == 0:
-                        tmp_str = f'[INFO] Checkpoint file saved to "{self.tmp_save_filename}".'  # noqa
-                        print(
-                            self._print_colors["lgrey"]
-                            + tmp_str
-                            + self._print_colors["reset"]
-                        )
+                        logger.info(
+                            f'Checkpoint file saved to "{self.tmp_save_filename}".'
+                        )  # noqa
                         self.last_epoch = epoch
                         self.save(self.tmp_save_filename, force=True)
 
@@ -1035,7 +1032,7 @@ Use ``add_criterion`` to define one."
         ]
 
         time_elapsed = time.time() - since
-        print(f"[INFO] Total time: {time_elapsed // 60:.0f}m {time_elapsed % 60:.0f}s")
+        logger.info(f"Total time: {time_elapsed // 60:.0f}m {time_elapsed % 60:.0f}s")
 
         # load best model weights
         self.model.load_state_dict(best_model_wts)
@@ -1050,10 +1047,10 @@ Use ``add_criterion`` to define one."
                 with open(os.path.join(save_model_dir, "info.txt"), "a+") as fio:
                     fio.writelines(f"{save_filename},{self.best_loss:.5f}\n")
 
-                print(
-                    f"[INFO] Model at epoch {self.best_epoch} has least valid loss ({self.best_loss:.4f}) so will be saved.\n\
-[INFO] Path: {save_model_path}"
+                logger.info(
+                    f"Model at epoch {self.best_epoch} has least valid loss ({self.best_loss:.4f}) so will be saved."
                 )
+                logger.info(f"Path: {save_model_path}")
 
     @staticmethod
     def _get_logits(out):
@@ -1325,8 +1322,8 @@ Use ``add_criterion`` to define one."
 
         for i, one_item in enumerate(y_axis):
             if one_item not in self.metrics.keys():
-                print(
-                    f"[WARNING] requested item: {one_item} not in keys: {self.metrics.keys}"  # noqa
+                logger.warning(
+                    f"Requested item: {one_item} not in keys: {self.metrics.keys}"  # noqa
                 )
                 continue
 
@@ -1523,8 +1520,8 @@ Use ``add_criterion`` to define one."
 
         num_batches = int(np.ceil(len(dataloader.dataset) / dataloader.batch_size))
         if min(num_batches, batch_number) != batch_number:
-            print(
-                f'[INFO] "{set_name}" only contains {num_batches}.\n\
+            logger.info(
+                f'"{set_name}" only contains {num_batches}.\n\
 Output will show batch number {num_batches}.'
             )
             batch_number = num_batches
@@ -1566,12 +1563,10 @@ Output will show batch number {num_batches}.'
         num_samples = len(self.dataloaders[set_name].dataset)
         num_batches = int(np.ceil(num_samples / batch_size))
 
-        print(
-            f"[INFO] dataset: {set_name}\n\
-        - items:        {num_samples}\n\
-        - batch size:   {batch_size}\n\
-        - batches:      {num_batches}"
-        )
+        logger.info(f"Dataset: {set_name}")
+        logger.info(f"- items:        {num_samples}")
+        logger.info(f"- batch size:   {batch_size}")
+        logger.info(f"- batches:      {num_batches}")
 
     @staticmethod
     def _imshow(
@@ -1787,7 +1782,7 @@ Output will show batch number {num_batches}.'
         if save_path is None:
             save_path = f"{set_name}_predictions_patch_df.csv"
         patch_df.to_csv(save_path, sep=delimiter)
-        print(f"[INFO] Saved predictions to {save_path}.")
+        logger.info(f"Saved predictions to {save_path}.")
 
     def load_dataset(
         self,
@@ -1817,7 +1812,7 @@ Output will show batch number {num_batches}.'
             The number of worker threads to use for loading data, by default 0.
         """
         if sampler and shuffle:
-            print("[INFO] ``sampler`` is defined so train dataset will be unshuffled.")
+            logger.info("`sampler` is defined so train dataset will be unshuffled.")
 
         dataloader = DataLoader(
             dataset,
@@ -1866,7 +1861,7 @@ Output will show batch number {num_batches}.'
         if not os.path.isfile(load_path):
             raise FileNotFoundError(f'[ERROR] "{load_path}" cannot be found.')
 
-        print(f'[INFO] Loading "{load_path}".')
+        logger.info(f'Loading "{load_path}".')
 
         with open(load_path, "rb") as myfile:
             # objPickle = pickle.load(myfile)
@@ -1890,40 +1885,6 @@ Output will show batch number {num_batches}.'
         except:
             pass
 
-    def _set_up_print_colors(self):
-        """Private function, setting color attributes on the object."""
-        self._print_colors = {}
-
-        # color
-        self._print_colors["lgrey"] = "\033[1;90m"
-        self._print_colors["grey"] = "\033[90m"  # boring information
-        self._print_colors["yellow"] = "\033[93m"  # FYI
-        self._print_colors["orange"] = "\033[0;33m"  # Warning
-
-        self._print_colors["lred"] = "\033[1;31m"  # there is smoke
-        self._print_colors["red"] = "\033[91m"  # fire!
-        self._print_colors["dred"] = "\033[2;31m"  # Everything is on fire
-
-        self._print_colors["lblue"] = "\033[1;34m"
-        self._print_colors["blue"] = "\033[94m"
-        self._print_colors["dblue"] = "\033[2;34m"
-
-        self._print_colors["lgreen"] = "\033[1;32m"  # all is normal
-        self._print_colors["green"] = "\033[92m"  # something else
-        self._print_colors["dgreen"] = "\033[2;32m"  # even more interesting
-
-        self._print_colors["lmagenta"] = "\033[1;35m"
-        self._print_colors["magenta"] = "\033[95m"  # for title
-        self._print_colors["dmagenta"] = "\033[2;35m"
-
-        self._print_colors["cyan"] = "\033[96m"  # system time
-        self._print_colors["white"] = "\033[97m"  # final time
-        self._print_colors["black"] = "\033[0;30m"
-
-        self._print_colors["reset"] = "\033[0m"
-        self._print_colors["bold"] = "\033[1m"
-        self._print_colors["under"] = "\033[4m"
-
     def _get_dtime(self) -> str:
         """
         Get the current date and time as a formatted string.
@@ -1935,38 +1896,6 @@ Output will show batch number {num_batches}.'
         """
         dtime = datetime.strftime(datetime.now(), "%Y-%m-%d %H:%M:%S")
         return dtime
-
-    def cprint(self, type_info: str, bc_color: str, text: str) -> None:
-        """
-        Print colored text with additional information.
-
-        Parameters
-        ----------
-        type_info : str
-            The type of message to display.
-        bc_color : str
-            The color to use for the message text.
-        text : str
-            The text to display.
-
-        Returns
-        -------
-        None
-            The colored message is displayed on the standard output stream.
-        """
-        host_name = socket.gethostname().split(".")[0][:10]
-
-        print(
-            self._print_colors["green"]
-            + self._get_dtime()
-            + self._print_colors["reset"],
-            self._print_colors["magenta"] + host_name + self._print_colors["reset"],
-            self._print_colors["bold"]
-            + self._print_colors["grey"]
-            + type_info
-            + self._print_colors["reset"],
-            self._print_colors[bc_color] + text + self._print_colors["reset"],
-        )
 
     def update_progress(
         self,

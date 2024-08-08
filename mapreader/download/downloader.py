@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import urllib
@@ -11,6 +12,9 @@ from .data_structures import Coordinate, GridBoundingBox
 from .downloader_utils import get_index_from_coordinate
 from .tile_loading import DEFAULT_TEMP_FOLDER, TileDownloader
 from .tile_merging import TileMerger
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 
 class Downloader:
@@ -43,8 +47,7 @@ class Downloader:
         self.download_url = my_ts
 
     def __str__(self) -> str:
-        info = f"[INFO] Downloading from {self.download_url}."
-        return info
+        return f"[INFO] Downloading from {self.download_url}."
 
     def _initialise_downloader(self):
         """
@@ -83,8 +86,8 @@ class Downloader:
             map_name = self.merger._get_output_name(grid_bb)
         path_save = self.merger.output_folder
         if os.path.exists(f"{path_save}{map_name}.png"):
-            print(
-                f'[INFO] "{path_save}{map_name}.png" already exists. Skipping download.'
+            logger.info(
+                f'"{path_save}{map_name}.png" already exists. Skipping download.'
             )
             return True
         return False
@@ -145,9 +148,9 @@ class Downloader:
         self.downloader.download_tiles(grid_bb, download_in_parallel=False)
         success = self.merger.merge(grid_bb, map_name)
         if success:
-            print(f'[INFO] Downloaded "{map_name}.png"')
+            logger.info(f'Downloaded "{map_name}.png"')
         else:
-            print(f'[WARNING] Download of "{map_name}.png" was unsuccessful.')
+            logger.warning(f'Download of "{map_name}.png" was unsuccessful.')
 
         shutil.rmtree(DEFAULT_TEMP_FOLDER)
         return success

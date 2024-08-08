@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 from random import randint
@@ -13,6 +14,10 @@ from pytest import approx
 from shapely.geometry import Polygon
 
 from mapreader.load.images import MapImages
+
+# Set up logging
+logger = logging.getLogger(__name__)
+logging.basicConfig(format="%(levelname)s:%(message)s")
 
 
 @pytest.fixture
@@ -160,7 +165,8 @@ def test_init_geotiff(sample_dir):
     assert isinstance(geotiffs, MapImages)
 
 
-def test_init_parent_path(sample_dir, image_id, capfd):
+def test_init_parent_path(sample_dir, image_id, caplog):
+    caplog.set_level(logging.INFO)
     maps = MapImages(
         f"{sample_dir}/{image_id}",
         tree_level="patch",
@@ -170,11 +176,9 @@ def test_init_parent_path(sample_dir, image_id, capfd):
     assert len(maps.list_patches()) == 1
 
     # without passing tree level should get warning
+
     maps = MapImages(f"{sample_dir}/{image_id}", parent_path=f"{sample_dir}/{image_id}")
-    out, _ = capfd.readouterr()
-    assert (
-        "[WARNING] Ignoring `parent_path` as `tree_level`  is set to 'parent'." in out
-    )
+    assert "Ignoring `parent_path` as `tree_level`  is set to 'parent'." in caplog.text
     assert len(maps.list_parents()) == 1
     assert len(maps.list_patches()) == 0
 
@@ -549,16 +553,16 @@ def test_calc_coords_from_grid_bb(sample_dir, image_id):
     )
 
 
-def test_calc_coords_from_grid_bb_warning(sample_dir, image_id, capfd):
+def test_calc_coords_from_grid_bb_warning(sample_dir, image_id, caplog):
+    caplog.set_level(logging.INFO)
     maps = MapImages(f"{sample_dir}/{image_id}")
     assert all([x not in maps.parents[image_id] for x in ["coordinates", "grid_bb"]])
     maps.add_coords_from_grid_bb()
-    out, _ = capfd.readouterr()
-    assert "[WARNING] No grid bounding box" in out
+    assert "No grid bounding box" in caplog.text
     assert "coordinates" not in maps.parents[image_id]
 
 
-def test_calc_coords_from_grid_bb_error(sample_dir, image_id, capfd):
+def test_calc_coords_from_grid_bb_error(sample_dir, image_id):
     maps = MapImages(f"{sample_dir}/{image_id}")
     maps.add_metadata(
         f"{sample_dir}/ts_downloaded_maps.csv", columns=["name", "grid_bb", "crs"]
@@ -569,7 +573,8 @@ def test_calc_coords_from_grid_bb_error(sample_dir, image_id, capfd):
         maps.add_coords_from_grid_bb()
 
 
-def test_coord_functions(init_maps, image_id, sample_dir, capfd):
+def test_coord_functions(init_maps, image_id, sample_dir, caplog):
+    caplog.set_level(logging.INFO)
     # test for png with added metadata
     maps, _, patch_list = init_maps
     maps.add_center_coord()
@@ -591,8 +596,7 @@ def test_coord_functions(init_maps, image_id, sample_dir, capfd):
     keys = list(tiffs.parents[image_id].keys())
     tiffs.add_coord_increments()
     tiffs.add_center_coord(tree_level="parent")
-    out, _ = capfd.readouterr()
-    assert "[WARNING] 'coordinates' could not be found" in out
+    assert "'coordinates' could not be found" in caplog.text
     assert list(tiffs.parents[image_id].keys()) == keys
 
 
@@ -652,7 +656,8 @@ def test_save_patches_as_geotiffs_grayscale(sample_dir, tmp_path):
     assert os.path.isfile(maps.patches[patch_id]["geotiff_path"])
 
 
-def test_save_to_geojson(init_maps, tmp_path, capfd):
+def test_save_to_geojson(init_maps, tmp_path, caplog):
+    caplog.set_level(logging.INFO)
     maps, _, _ = init_maps
     maps.save_patches_to_geojson(geojson_fname=f"{tmp_path}/patches.geojson")
     assert os.path.exists(f"{tmp_path}/patches.geojson")
@@ -662,8 +667,7 @@ def test_save_to_geojson(init_maps, tmp_path, capfd):
     assert isinstance(geo_df["geometry"][0], Polygon)
 
     maps.save_patches_to_geojson(geojson_fname=f"{tmp_path}/patches.geojson")
-    out, _ = capfd.readouterr()
-    assert "[WARNING] File already exists" in out
+    assert "File already exists" in caplog.text
 
 
 def test_save_to_geojson_missing_data(sample_dir, image_id, tmp_path):

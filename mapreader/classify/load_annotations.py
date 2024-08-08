@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
+import logging
 import os
 from decimal import Decimal
 from typing import Callable
@@ -15,6 +16,9 @@ from torch.utils.data import DataLoader, Sampler, WeightedRandomSampler
 from torchvision.transforms import Compose
 
 from .datasets import PatchContextDataset, PatchDataset
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 
 class AnnotationsLoader:
@@ -89,16 +93,16 @@ class AnnotationsLoader:
         if not self.patch_paths_col:
             self.patch_paths_col = patch_paths_col
         elif self.patch_paths_col != patch_paths_col:
-            print(
-                f'[WARNING] Patch paths column was previously "{self.patch_paths_col}, but will now be set to {patch_paths_col}.'
+            logger.warning(
+                f'Patch paths column was previously "{self.patch_paths_col}, but will now be set to {patch_paths_col}.'
             )
             self.patch_paths_col = patch_paths_col
 
         if not self.label_col:
             self.label_col = label_col
         elif self.label_col != label_col:
-            print(
-                f'[WARNING] Label column was previously "{self.label_col}, but will now be set to {label_col}.'
+            logger.warning(
+                f'Label column was previously "{self.label_col}, but will now be set to {label_col}.'
             )
             self.label_col = label_col
 
@@ -173,7 +177,7 @@ class AnnotationsLoader:
         """
 
         if os.path.isfile(annotations):
-            print(f'[INFO] Reading "{annotations}"')
+            logger.info(f'Reading "{annotations}"')
             annotations = pd.read_csv(annotations, sep=delimiter, index_col=0)
         else:
             raise ValueError(f'[ERROR] "{annotations}" cannot be found.')
@@ -222,9 +226,9 @@ class AnnotationsLoader:
                 for broken_path in broken_paths:
                     f.write(f"{broken_path}\n")
 
-            print(
-                f"[WARNING] {len(broken_paths)} files cannot be found.\n\
-Check '{os.path.abspath('broken_paths.txt')}' for more details and, if possible, update your file paths using the 'images_dir' argument."
+            logger.warning(f"{len(broken_paths)} files cannot be found.")
+            logger.warning(
+                f"Check '{os.path.abspath('broken_paths.txt')}' for more details and, if possible, update your file paths using the 'images_dir' argument."
             )
 
             if remove_broken:
@@ -234,15 +238,15 @@ Check '{os.path.abspath('broken_paths.txt')}' for more details and, if possible,
 Please check your files exist and, if possible, update your file paths using the 'images_dir' argument."
                     )
                 else:
-                    print(
-                        f"[INFO] Annotations with broken file paths have been removed.\n\
-Number of annotations remaining: {len(self.annotations)}"
+                    logger.info("Annotations with broken file paths have been removed.")
+                    logger.info(
+                        f"Number of annotations remaining: {len(self.annotations)}"
                     )
 
             else:  # raise error for 'remove_broken=False'
                 if ignore_broken:
-                    print(
-                        f"[WARNING] Continuing with {len(broken_paths)} broken file paths."
+                    logger.warning(
+                        f"Continuing with {len(broken_paths)} broken file paths."
                     )
                 else:
                     raise ValueError(
@@ -292,7 +296,7 @@ Please check your image paths in your annonations.csv file and update them if ne
         if len(self.annotations) == 0:
             raise ValueError("[ERROR] No annotations loaded.")
 
-        print(f"[INFO] Unique labels: {self.unique_labels}")
+        logger.info(f"Unique labels: {self.unique_labels}")
 
     def review_labels(
         self,
@@ -379,9 +383,9 @@ Please check your image paths in your annonations.csv file and update them if ne
 
         image_idx = 0
         while image_idx < len(annots2review):
-            print('[INFO] Type "exit", "end" or "stop" to exit.')
-            print(
-                f"[INFO] Showing {image_idx}-{image_idx+chunks} out of {len(annots2review)}."  # noqa
+            logger.info('Type "exit", "end" or "stop" to exit.')
+            logger.info(
+                f"Showing {image_idx}-{image_idx+chunks} out of {len(annots2review)}."  # noqa
             )
             plt.figure(figsize=(num_cols * 3, (chunks // num_cols) * 3))
             counter = 1
@@ -418,7 +422,7 @@ Please check your image paths and update them if necessary.'
                 image_idx += 1
             plt.show()
 
-            print(f"[INFO] IDs of current patches: {iter_ids}")
+            logger.info(f"IDs of current patches: {iter_ids}")
             q = "\nEnter IDs, comma separated (or press enter to continue): "
             user_input_ids = input(q)
 
@@ -429,13 +433,13 @@ Please check your image paths and update them if necessary.'
                 "stop",
             ]:
                 list_input_ids = user_input_ids.split(",")
-                print(
-                    f"[INFO] Options for labels:{list(self.annotations[self.label_col].unique())}"
+                logger.info(
+                    f"Options for labels:{list(self.annotations[self.label_col].unique())}"
                 )
                 input_label = input("Enter new label:  ")
                 if input_label not in list(self.annotations[self.label_col].unique()):
-                    print(
-                        f'[ERROR] Label "{input_label}" not found in the annotations. Please enter a valid label.'
+                    logger.error(
+                        f'Label "{input_label}" not found in the annotations. Please enter a valid label.'
                     )
                     continue
 
@@ -455,8 +459,8 @@ Please check your image paths and update them if necessary.'
                         self.annotations[self.label_col].value_counts().tolist()
                         == self.annotations["label_index"].value_counts().tolist()
                     )
-                    print(
-                        f'[INFO] Image {input_id} has been relabelled as "{input_label}"'
+                    logger.info(
+                        f'Image {input_id} has been relabelled as "{input_label}"'
                     )
 
                 user_input_ids = input(q)
@@ -464,7 +468,7 @@ Please check your image paths and update them if necessary.'
             if user_input_ids.lower() in ["exit", "end", "stop"]:
                 break
 
-        print("[INFO] Exited.")
+        logger.info("Exited.")
 
     def show_sample(self, label_to_show: str, num_samples: int | None = 9) -> None:
         """Show a random sample of images with the specified label (tar_label).
@@ -641,9 +645,9 @@ Please check your image paths and update them if necessary.'
         self.datasets = datasets
         self.dataset_sizes = dataset_sizes
 
-        print("[INFO] Number of annotations in each set:")
+        logger.info("Number of annotations in each set:")
         for set_name in datasets.keys():
-            print(f"    - {set_name}:   {dataset_sizes[set_name]}")
+            logger.info(f"    - {set_name}:   {dataset_sizes[set_name]}")
 
     def create_patch_datasets(
         self, train_transform, val_transform, test_transform, df_train, df_val, df_test
@@ -764,8 +768,8 @@ Please check your image paths and update them if necessary.'
         ``sampler`` will only be applied to the training dataset (datasets["train"]).
         """
         if not self.datasets:
-            print(
-                "[INFO] Creating datasets using default train/val/test split of 0.7:0.15:0.15 and default transformations."
+            logger.info(
+                "Creating datasets using default train/val/test split of 0.7:0.15:0.15 and default transformations."
             )
             self.create_datasets()
 
@@ -773,7 +777,7 @@ Please check your image paths and update them if necessary.'
 
         if isinstance(sampler, str):
             if sampler == "default":
-                print("[INFO] Using default sampler.")
+                logger.info("Using default sampler.")
                 sampler = self._define_sampler()
             else:
                 raise ValueError(
@@ -781,7 +785,7 @@ Please check your image paths and update them if necessary.'
                 )
 
         if sampler and shuffle:
-            print("[INFO] ``sampler`` is defined so train dataset will be un-shuffled.")
+            logger.info("``sampler`` is defined so train dataset will be un-shuffled.")
 
         dataloaders = {
             set_name: DataLoader(
@@ -855,11 +859,11 @@ Please check your image paths and update them if necessary.'
         return self.unique_labels.index(label)
 
     def __str__(self):
-        print(f"[INFO] Number of annotations:   {len(self.annotations)}\n")
+        logger.info(f"Number of annotations:   {len(self.annotations)}\n")
         if len(self.annotations) > 0:
             value_counts = self.annotations[self.label_col].value_counts()
-            print(
-                f'[INFO] Number of instances of each label (from column "{self.label_col}"):'
+            logger.info(
+                f'Number of instances of each label (from column "{self.label_col}"):'
             )
             for label, count in value_counts.items():
                 print(f"    - {label}:  {count}")

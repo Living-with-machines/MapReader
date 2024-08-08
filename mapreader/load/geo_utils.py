@@ -1,10 +1,15 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
+import logging
+
 import numpy as np
 import rasterio
 from geopy.distance import geodesic, great_circle
 from pyproj import Transformer
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 
 def extractGeoInfo(image_path):
@@ -33,8 +38,9 @@ def extractGeoInfo(image_path):
         tiff_proj = tiff_src.crs.to_string()
         tiff_coord = tuple(tiff_src.bounds)
 
-    print(f"[INFO] Shape: {tiff_shape}. \n[INFO] CRS: {tiff_proj}.")
-    print("[INFO] Coordinates: {:.4f} {:.4f} {:.4f} {:.4f}".format(*tiff_coord))
+    logger.info(f"Shape: {tiff_shape}.")
+    logger.info(f"CRS: {tiff_proj}.")
+    logger.info("Coordinates: {:.4f} {:.4f} {:.4f} {:.4f}".format(*tiff_coord))
 
     return tiff_shape, tiff_proj, tiff_coord
 
@@ -61,8 +67,8 @@ def reproject_geo_info(image_path, target_crs="EPSG:4326", calc_size_in_m=False)
     # Coordinate transformation: proj1 ---> proj2
     transformer = Transformer.from_crs(tiff_proj, target_crs, always_xy=True)
     coord = transformer.transform_bounds(*tiff_coord)
-    print(f"[INFO] New CRS: {target_crs}")
-    print("[INFO] Reprojected coordinates: {:.4f} {:.4f} {:.4f} {:.4f}".format(*coord))
+    logger.info(f"New CRS: {target_crs}")
+    logger.info("Reprojected coordinates: {:.4f} {:.4f} {:.4f} {:.4f}".format(*coord))
 
     height, width, _ = tiff_shape
 
@@ -91,8 +97,8 @@ def reproject_geo_info(image_path, target_crs="EPSG:4326", calc_size_in_m=False)
         mean_pixel_height = np.mean([right / height, left / height])
         mean_pixel_width = np.mean([bottom / width, top / width])
 
-        print(
-            f"[INFO] Size in meters of left/bottom/right/top: {left:.2f}/{bottom:.2f}/{right:.2f}/{top:.2f}"
+        logger.info(
+            f"Size in meters of left/bottom/right/top: {left:.2f}/{bottom:.2f}/{right:.2f}/{top:.2f}"
         )
         print(
             f"Each pixel is ~{mean_pixel_height:.3f} X {mean_pixel_width:.3f} meters (height x width)."

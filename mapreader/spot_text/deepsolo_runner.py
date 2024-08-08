@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import pathlib
 import pickle
 
@@ -29,6 +30,9 @@ if adet.__version__ != "0.2.0-deepsolo":
     )
 
 from .runner_base import Runner
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 
 class DeepSoloRunner(Runner):

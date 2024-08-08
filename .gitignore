@@ -19,3 +19,6 @@ worked_examples/**/workshops_*/**/*.png
 worked_examples/**/workshops_*/**/*.csv
 worked_examples/**/workshops_*/**/*.geojson
 worked_examples/**/workshops_*/**/*.xlsx
+
+# test outputs
+tmp_checkpoints

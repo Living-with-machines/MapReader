@@ -5,6 +5,7 @@ try:
 except ImportError:
     pass
 
+import logging
 import os
 import random
 import re
@@ -36,6 +37,9 @@ import geopandas as geopd  # noqa: E402
 
 # Ignore warnings
 warnings.filterwarnings("ignore")
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 
 class MapImages:
@@ -202,8 +206,8 @@ class MapImages:
 
         if tree_level == "parent":
             if parent_path:
-                print(
-                    "[WARNING] Ignoring `parent_path` as `tree_level`  is set to 'parent'."
+                logger.warning(
+                    "Ignoring `parent_path` as `tree_level`  is set to 'parent'."
                 )
                 parent_path = None
             parent_id = None
@@ -388,8 +392,8 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
         if "name" in columns:
             image_id_col = "name"
             if "image_id" in columns:
-                print(
-                    "[WARNING] Both 'name' and 'image_id' columns exist! Using 'name' as index"  # noqa
+                logger.warning(
+                    "Both 'name' and 'image_id' columns exist! Using 'name' as index"  # noqa
                 )
         elif "image_id" in columns:
             image_id_col = "image_id"
@@ -399,8 +403,8 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
             )
 
         if any(metadata_df.duplicated(subset=image_id_col)):
-            print(
-                "[WARNING] Duplicates found in metadata. Keeping only first instance of each duplicated value"
+            logger.warning(
+                "Duplicates found in metadata. Keeping only first instance of each duplicated value"
             )
             metadata_df.drop_duplicates(subset=image_id_col, inplace=True, keep="first")
 
@@ -521,21 +525,21 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
         The method runs :meth:`~.load.images.MapImages._add_shape_id`
         for each image present at the ``tree_level`` provided.
         """
-        print(f"[INFO] Add shape, tree level: {tree_level}")
+        logger.info(f"Add shape, tree level: {tree_level}")
 
         image_ids = list(self.images[tree_level].keys())
         for image_id in image_ids:
             self._add_shape_id(image_id=image_id)
 
     def add_coords_from_grid_bb(self, verbose: bool = False) -> None:
-        print("[INFO] Adding coordinates, tree level: parent")
+        logger.info("Adding coordinates, tree level: parent")
 
         parent_list = self.list_parents()
 
         for parent_id in parent_list:
             if "grid_bb" not in self.parents[parent_id].keys():
-                print(
-                    f"[WARNING] No grid bounding box found for {parent_id}. Suggestion: run add_metadata or add_geo_info."  # noqa
+                logger.warning(
+                    f"No grid bounding box found for {parent_id}. Suggestion: run add_metadata or add_geo_info."  # noqa
                 )
                 continue
 
@@ -562,14 +566,14 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
         pixel-wise delta longitude (``dlon``) and delta latitude (``dlat``)
         for the image and adds the data to it.
         """
-        print("[INFO] Add coord-increments, tree level: parent")
+        logger.info("Add coord-increments, tree level: parent")
 
         parent_list = self.list_parents()
 
         for parent_id in parent_list:
             if "coordinates" not in self.parents[parent_id].keys():
-                print(
-                    f"[WARNING] No coordinates found for {parent_id}. Suggestion: run add_metadata or add_geo_info."  # noqa
+                logger.warning(
+                    f"No coordinates found for {parent_id}. Suggestion: run add_metadata or add_geo_info."  # noqa
                 )
                 continue
 
@@ -629,7 +633,7 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
         central longitude and latitude (``center_lon`` and ``center_lat``) for
         the image and adds the data to it.
         """
-        print(f"[INFO] Add center coordinates, tree level: {tree_level}")
+        logger.info(f"Add center coordinates, tree level: {tree_level}")
 
         image_ids = list(self.images[tree_level].keys())
 
@@ -639,8 +643,8 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
         for image_id in image_ids:
             if tree_level == "parent":
                 if "coordinates" not in self.parents[image_id].keys():
-                    print(
-                        f"[WARNING] 'coordinates' could not be found in {image_id}. Suggestion: run add_metadata or add_geo_info"  # noqa
+                    logger.warning(
+                        f"'coordinates' could not be found in {image_id}. Suggestion: run add_metadata or add_geo_info"  # noqa
                     )
                     continue
 
@@ -649,8 +653,8 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
 
                 if "coordinates" not in self.parents[parent_id].keys():
                     if parent_id not in already_checked_parent_ids:
-                        print(
-                            f"[WARNING] 'coordinates' could not be found in {parent_id} so center coordinates cannot be calculated for it's patches. Suggestion: run add_metadata or add_geo_info."  # noqa
+                        logger.warning(
+                            f"'coordinates' could not be found in {parent_id} so center coordinates cannot be calculated for it's patches. Suggestion: run add_metadata or add_geo_info."  # noqa
                         )
                         already_checked_parent_ids.append(parent_id)
                     continue
@@ -768,9 +772,8 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
         """
 
         if "coordinates" not in self.parents[image_id].keys():
-            self._print_if_verbose(
-                f"[WARNING]'coordinates' could not be found in {image_id}. Suggestion: run add_metadata or add_geo_info.",
-                verbose,
+            logger.warning(
+                f"'coordinates' could not be found in {image_id}. Suggestion: run add_metadata or add_geo_info."
             )
             return
 
@@ -807,9 +810,8 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
         parent_id = self.patches[image_id]["parent_id"]
 
         if "coordinates" not in self.parents[parent_id].keys():
-            self._print_if_verbose(
-                f"[WARNING] No coordinates found in  {parent_id} (parent of {image_id}). Suggestion: run add_metadata or add_geo_info.",
-                verbose,
+            logger.warning(
+                f"No coordinates found in  {parent_id} (parent of {image_id}). Suggestion: run add_metadata or add_geo_info."
             )
             return
 
@@ -883,9 +885,8 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
 
         if "coordinates" not in self.images[tree_level][image_id].keys():
             if tree_level == "parent":
-                self._print_if_verbose(
-                    f"[WARNING] No coordinates found for {image_id}. Suggestion: run add_metadata or add_geo_info.",
-                    verbose,
+                logger.warning(
+                    f"No coordinates found for {image_id}. Suggestion: run add_metadata or add_geo_info."
                 )
                 return
 
@@ -893,9 +894,7 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
                 self._add_patch_coords_id(image_id, verbose)
 
         if "coordinates" in self.images[tree_level][image_id].keys():
-            self._print_if_verbose(
-                f"[INFO] Reading 'coordinates' from {image_id}.", verbose
-            )
+            logger.info(f"Reading 'coordinates' from {image_id}.")
 
             min_x, min_y, max_x, max_y = self.images[tree_level][image_id][
                 "coordinates"
@@ -943,8 +942,8 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
         """
 
         if "coordinates" not in self.parents[parent_id].keys():
-            print(
-                f"[WARNING] 'coordinates' could not be found in {parent_id}. Suggestion: run add_metadata or add_geo_info."  # noqa
+            logger.warning(
+                f"'coordinates' could not be found in {parent_id}. Suggestion: run add_metadata or add_geo_info."  # noqa
             )
             return
 
@@ -977,13 +976,11 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
         mean_pixel_height = np.mean([right / height, left / height])
         mean_pixel_width = np.mean([bottom / width, top / width])
 
-        self._print_if_verbose(
-            f"[INFO] Size in meters of left/bottom/right/top: {left:.2f}/{bottom:.2f}/{right:.2f}/{top:.2f}",
-            verbose,
+        logger.info(
+            f"Size in meters of left/bottom/right/top: {left:.2f}/{bottom:.2f}/{right:.2f}/{top:.2f}"
         )
-        self._print_if_verbose(
-            f"Each pixel is ~{mean_pixel_height:.3f} X {mean_pixel_width:.3f} meters (height x width).",
-            verbose,
+        logger.info(
+            f"Each pixel is ~{mean_pixel_height:.3f} X {mean_pixel_width:.3f} meters (height x width)."
         )  # noqa
 
         return size_in_m, mean_pixel_height, mean_pixel_width
@@ -1049,17 +1046,21 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
         if path_save is None:
             path_save = f"patches_{patch_size}_{method}"
 
-        print(f'[INFO] Saving patches in directory named "{path_save}".')
+        logger.info(f'Saving patches in directory named "{path_save}".')
 
         for image_id in tqdm(image_ids):
             image_path = self.images[tree_level][image_id]["image_path"]
 
             try:
-                full_path = print(os.path.relpath(image_path))
+                full_path = print(
+                    os.path.relpath(image_path)
+                )  # TODO: This looks like it won't work
             except ValueError:  # if no rel path (e.g. mounted on different drives)
-                full_path = print(os.path.abspath(image_path))
+                full_path = print(
+                    os.path.abspath(image_path)
+                )  # TODO: This looks like it won't work
 
-            self._print_if_verbose(f"[INFO] Patchifying {full_path}", verbose)
+            logger.info(f"Patchifying {full_path}")
 
             # make sure the dir exists
             self._make_dir(path_save)
@@ -1076,8 +1077,8 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
                 )  ## check this is correct - should patch be different size in x and y?
 
             if square_cuts:
-                print(
-                    "[WARNING] Square cuts is deprecated as of version 1.1.3 and will soon be removed."
+                logger.warning(
+                    "Square cuts is deprecated as of version 1.1.3 and will soon be removed."
                 )
 
                 self._patchify_by_pixel_square(
@@ -1169,9 +1170,7 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
                 patch_path = os.path.abspath(patch_path)
 
                 if os.path.isfile(patch_path) and not rewrite:
-                    self._print_if_verbose(
-                        f"[INFO] File already exists: {patch_path}.", verbose
-                    )
+                    logger.info(f"File already exists: {patch_path}.")
 
                 else:
                     patch = img.crop((x, y, max_x, max_y))
@@ -1271,14 +1270,11 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
                 patch_path = os.path.abspath(patch_path)
 
                 if os.path.isfile(patch_path) and not rewrite:
-                    self._print_if_verbose(
-                        f"[INFO] File already exists: {patch_path}.", verbose
-                    )
+                    logger.info(f"File already exists: {patch_path}.")
 
                 else:
-                    self._print_if_verbose(
-                        f'[INFO] Creating "{patch_id}". Number of pixels in x,y: {max_x - min_x},{max_y - min_y}.',
-                        verbose,
+                    logger.info(
+                        f'Creating "{patch_id}". Number of pixels in x,y: {max_x - min_x},{max_y - min_y}.'
                     )
 
                     patch = img.crop((min_x, min_y, max_x, max_y))
@@ -1390,13 +1386,10 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
             parent_ids = [parent_id]
 
         for parent_id in tqdm(parent_ids):
-            self._print_if_verbose(
-                f"\n[INFO] Calculating pixel stats for patches of image: {parent_id}",
-                verbose,
-            )
+            logger.info(f"Calculating pixel stats for patches of image: {parent_id}")
 
             if "patches" not in self.parents[parent_id]:
-                print(f"[WARNING] No patches found for: {parent_id}")
+                logger.warning(f"No patches found for: {parent_id}")
                 continue
 
             list_patches = self.parents[parent_id]["patches"]
@@ -1478,14 +1471,14 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
         if save:
             if save_format == "csv":
                 parent_df.to_csv("parent_df.csv", sep=delimiter)
-                print('[INFO] Saved parent dataframe as "parent_df.csv"')
+                logger.info('Saved parent dataframe as "parent_df.csv"')
                 patch_df.to_csv("patch_df.csv", sep=delimiter)
-                print('[INFO] Saved patch dataframe as "patch_df.csv"')
+                logger.info('Saved patch dataframe as "patch_df.csv"')
             elif save_format in ["excel", "xlsx"]:
                 parent_df.to_excel("parent_df.xlsx")
-                print('[INFO] Saved parent dataframe as "parent_df.xlsx"')
+                logger.info('Saved parent dataframe as "parent_df.xlsx"')
                 patch_df.to_excel("patch_df.xlsx")
-                print('[INFO] Saved patch dataframe as "patch_df.xslx"')
+                logger.info('Saved patch dataframe as "patch_df.xslx"')
 
             else:
                 raise ValueError(
@@ -1638,14 +1631,14 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
                     plt.imshow(img, zorder=1)
 
                 if column_to_plot:
-                    print(
-                        "[WARNING] Values are only plotted on patches. If you'd like to plot values on all patches of a parent image, use ``show_parent`` instead."
+                    logger.warning(
+                        "Values are only plotted on patches. If you'd like to plot values on all patches of a parent image, use ``show_parent`` instead."
                     )
 
                 if save_kml_dir:
                     if "coordinates" not in self.parents[image_id].keys():
-                        print(
-                            f"[WARNING] 'coordinates' could not be found in {image_id} so no KML file can be created/saved."  # noqa
+                        logger.warning(
+                            f"'coordinates' could not be found in {image_id} so no KML file can be created/saved."  # noqa
                         )
                         continue
                     else:
@@ -1678,7 +1671,7 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
                 parent_id = self.patches[image_id].get("parent_id", None)
 
                 if parent_id is None:
-                    print(f"[WARNING] {image_id} has no parent. Skipping.")
+                    logger.warning(f"{image_id} has no parent. Skipping.")
                     continue
 
                 if parent_id not in parent_images.keys():
@@ -1908,7 +1901,7 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
 
         for patch_file in tqdm(patch_files):
             if not os.path.isfile(patch_file):
-                print(f"[WARNING] File does not exist: {patch_file}")
+                logger.warning(f"File does not exist: {patch_file}")
                 continue
 
             self._check_image_mode(patch_file)
@@ -2033,7 +2026,7 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
 
             for file in tqdm(files):
                 if not os.path.isfile(file):
-                    print(f"[WARNING] File does not exist: {file}")
+                    logger.warning(f"File does not exist: {file}")
                     continue
 
                 self._check_image_mode(file)
@@ -2229,9 +2222,8 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
 
         # Check whether coordinates are present
         if isinstance(tiff_src.crs, type(None)):
-            self._print_if_verbose(
-                f"No coordinates found in {image_id}. Try add_metadata instead.",
-                verbose,
+            logger.warning(
+                f"No coordinates found in {image_id}. Try add_metadata instead."
             )  # noqa
             return
 
@@ -2244,14 +2236,6 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
             coords = transformer.transform_bounds(*tiff_src.bounds)
             self.parents[image_id]["coordinates"] = coords
             self.parents[image_id]["crs"] = target_crs
-
-    @staticmethod
-    def _print_if_verbose(msg: str, verbose: bool) -> None:
-        """
-        Print message if verbose is True.
-        """
-        if verbose:
-            print(msg)
 
     def _get_tree_level(self, image_id: str) -> str:
         """Identify tree level of an image from image_id.
@@ -2337,22 +2321,19 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
 
         if os.path.isfile(f"{geotiff_path}"):
             if not rewrite:
-                self._print_if_verbose(
-                    f"[INFO] File already exists: {geotiff_path}.", verbose
-                )
+                logger.info(f"File already exists: {geotiff_path}.")
                 return
 
-        self._print_if_verbose(
-            f"[INFO] Creating: {geotiff_path}.",
-            verbose,
-        )
+        logger.info(f"Creating: {geotiff_path}.")
 
         if "shape" not in self.parents[parent_id].keys():
             self._add_shape_id(parent_id)
         height, width, channels = self.parents[parent_id]["shape"]
 
         if "coordinates" not in self.parents[parent_id].keys():
-            print(self.parents[parent_id].keys())
+            print(
+                self.parents[parent_id].keys()
+            )  # TODO: add logging here instead of print?
             raise ValueError(f"[ERROR] Cannot locate coordinates for {parent_id}")
         coords = self.parents[parent_id]["coordinates"]
 
@@ -2450,15 +2431,10 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
 
         if os.path.isfile(f"{geotiff_path}"):
             if not rewrite:
-                self._print_if_verbose(
-                    f"[INFO] File already exists: {geotiff_path}.", verbose
-                )
+                logger.info(f"File already exists: {geotiff_path}.")
                 return
 
-        self._print_if_verbose(
-            f"[INFO] Creating: {geotiff_path}.",
-            verbose,
-        )
+        logger.info(f"Creating: {geotiff_path}.")
 
         # get shape
         if "shape" not in self.patches[patch_id].keys():
@@ -2524,8 +2500,8 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
         """
         if os.path.isfile(geojson_fname):
             if not rewrite:
-                print(
-                    f"[WARNING] File already exists: {geojson_fname}. Use ``rewrite=True`` to overwrite."
+                logger.warning(
+                    f"File already exists: {geojson_fname}. Use ``rewrite=True`` to overwrite."
                 )
                 return
 
@@ -2593,9 +2569,9 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
                 try:
                     metadata_df = pd.read_csv(metadata)
                 except:
-                    print(f"[WARNING] could not find metadata file: {metadata}")  # noqa
+                    logger.warning(f"could not find metadata file: {metadata}")  # noqa
             else:
-                print(f"format cannot be recognized: {metadata_fmt}")
+                logger.warning(f"format cannot be recognized: {metadata_fmt}")
                 include_metadata = False
             if include_metadata:
                 metadata_df['rd_index_id'] = metadata_df[metadata_index_column].apply(lambda x: os.path.basename(x))

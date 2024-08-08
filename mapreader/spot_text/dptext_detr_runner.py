@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import pathlib
 
 try:
@@ -28,6 +29,9 @@ if adet.__version__ != "0.2.0-dptext-detr":
     )
 
 from .runner_base import Runner
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 
 class DPTextDETRRunner(Runner):

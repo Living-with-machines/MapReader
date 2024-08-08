@@ -13,9 +13,13 @@ except ImportError:
     pass
 
 import distutils.spawn
+import logging
 import os
 import subprocess
 from glob import glob
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 
 def preprocess_all(
@@ -50,7 +54,7 @@ def preprocess_all(
 
     saved_paths = []
     for one_path in all_paths:
-        print(f"Preprocessing: {one_path}")
+        logger.info(f"Preprocessing: {one_path}")
         saved_path = preprocess(one_path, save_preproc_dir, **kwds)
         saved_paths.append(saved_path)
     return saved_paths
@@ -119,7 +123,7 @@ def preprocess(
     )
 
     if os.path.isfile(path2save_resample):
-        print(f"{path2save_resample} already exists!")
+        logger.warning(f"{path2save_resample} already exists!")
         return "False"
 
     with rasterio.open(image_path) as src:

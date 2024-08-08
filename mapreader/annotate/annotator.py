@@ -3,6 +3,7 @@ from __future__ import annotations
 import functools
 import hashlib
 import json
+import logging
 import os
 import random
 import string
@@ -20,11 +21,15 @@ from PIL import Image, ImageOps
 
 from ..load.loader import load_patches
 
+# Ignore warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 
 _CENTER_LAYOUT = widgets.Layout(
     display="flex", flex_flow="column", align_items="center"
 )
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 
 class Annotator:
@@ -218,7 +223,7 @@ class Annotator:
 
         # Test for existing patch annotation file
         if os.path.exists(annotations_file):
-            print("[INFO] Loading existing patch annotations.")
+            logger.info("Loading existing patch annotations.")
             patch_df = self._load_annotations(
                 patch_df=patch_df,
                 annotations_file=annotations_file,
@@ -330,9 +335,9 @@ class Annotator:
             A tuple containing the parent dataframe and patch dataframe.
         """
         if patch_paths:
-            print(f"[INFO] Loading patches from {patch_paths}.")
+            logger.info(f"Loading patches from {patch_paths}.")
         if parent_paths:
-            print(f"[INFO] Loading parents from {parent_paths}.")
+            logger.info(f"Loading parents from {parent_paths}.")
 
         maps = load_patches(patch_paths=patch_paths, parent_paths=parent_paths)
         # Add pixel stats
@@ -340,10 +345,10 @@ class Annotator:
 
         try:
             maps.add_metadata(metadata_path, delimiter=delimiter)
-            print(f"[INFO] Adding metadata from {metadata_path}.")
+            logger.info(f"Adding metadata from {metadata_path}.")
         except ValueError:
             raise FileNotFoundError(
-                f"[INFO] Metadata file at {metadata_path} not found. Please specify the correct file path using the ``metadata_path`` argument."
+                f"[ERROR] Metadata file at {metadata_path} not found. Please specify the correct file path using the ``metadata_path`` argument."
             )
 
         parent_df, patch_df = maps.convert_images()
@@ -746,7 +751,7 @@ class Annotator:
         self._queue = self.get_queue()
 
         if self._filter_for is not None:
-            print(f"[INFO] Filtering for: {self._filter_for}")
+            logger.info(f"Filtering for: {self._filter_for}")
 
         self.out = widgets.Output(layout=_CENTER_LAYOUT)
         display(self.box)

@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
+import logging
 import os
 import random
 import sys
@@ -25,9 +26,13 @@ from PIL import Image
 
 from mapreader import load_patches, loader
 
+# Ignore warnings
 warnings.filterwarnings("ignore")
-# warnings.filterwarnings(
+#   (
 #     "ignore", message="Pandas doesn't allow columns to be created via a new attribute name")
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 
 def prepare_data(
@@ -77,10 +82,10 @@ def prepare_data(
         col_names = ["image_path", "parent_id"]
     if (label_col_name in list(df.columns)) and (not redo):
         already_annotated = len(df[~df[label_col_name].isnull()])
-        print(f"Number of already annotated images: {already_annotated}")
+        logger.info(f"Number of already annotated images: {already_annotated}")
         # only annotate those patches that have not been already annotated
         df = df[df[label_col_name].isnull()]
-        print(f"Number of images to be annotated (total): {len(df)}")
+        logger.info(f"Number of images to be annotated (total): {len(df)}")
     else:
         # if redo = True or "label" column does not exist
         # annotate all patches in the pandas dataframe
@@ -100,10 +105,10 @@ def prepare_data(
             else:
                 df = df.groupby("pixel_groups").sample(n=10, random_state=random_state)
         except Exception:
-            print(f"[INFO] len(df) = {len(df)}, .sample method is deactivated.")
+            logger.info(f"len(df) = {len(df)}, .sample method is deactivated.")
             df = df.iloc[:num_samples]
     else:
-        print(f"[WARNING] could not find {tar_param} in columns.")
+        logger.warning(f"could not find {tar_param} in columns.")
         df = df.iloc[:num_samples]
 
     data = []
@@ -117,7 +122,7 @@ def prepare_data(
         data.append(cols2add)
         row_counter += 1
 
-    print(f"Number of images to annotate (current batch): {len(data)}")
+    logger.info(f"Number of images to annotate (current batch): {len(data)}")
     return data
 
 
@@ -300,9 +305,9 @@ def annotation_interface(
             plt.tight_layout()
             plt.show()
 
-            print(20 * "-")
-            print("Additional info:")
-            print(f"Counter: {record[-1]}")
+            logger.info(20 * "-")
+            logger.info("Additional info:")
+            logger.info(f"Counter: {record[-1]}")
             if url_main:
                 try:
                     map_id = record[2].split("_")[-1].split(".")[0]
@@ -311,8 +316,7 @@ def annotation_interface(
                     # the page exists
                     response = requests.get(url, stream=True)
                     assert response.status_code < 400
-                    print()
-                    print(f"URL: {url}")
+                    logger.info(f"URL: {url}")
                 except:
                     url = False
                     pass
@@ -665,7 +669,7 @@ def save_annotation(
         annotation_tasks = yaml.load(f, Loader=yaml.FullLoader)
 
     if annotation_set not in annotation_tasks["paths"].keys():
-        print(f"{annotation_set} could not be found in {annotation_tasks_file}")
+        logger.info(f"{annotation_set} could not be found in {annotation_tasks_file}")
     else:
         annot_file = os.path.join(
             annotation_tasks["paths"][annotation_set]["annot_dir"],
@@ -704,8 +708,8 @@ def save_annotation(
     if len(image_df) > 0:
         # image_df = image_df.set_index("image_id")
         image_df.to_csv(annot_file, mode="w")
-        print(f"[INFO] Save {newly_annotated} new annotations to {annot_file}")
-        print(f"[INFO] {new_labels} labels were not already stored")
-        print(f"[INFO] Total number of saved annotations: {len(image_df)}")
+        logger.info(f"Save {newly_annotated} new annotations to {annot_file}")
+        logger.info(f"{new_labels} labels were not already stored")
+        logger.info(f"Total number of saved annotations: {len(image_df)}")
     else:
-        print("[INFO] No annotations to save!")
+        logger.info("No annotations to save!")

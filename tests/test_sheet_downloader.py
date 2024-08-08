@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from ast import literal_eval
 from pathlib import Path
@@ -14,6 +15,9 @@ from mapreader import SheetDownloader
 from mapreader.download.data_structures import GridBoundingBox
 from mapreader.download.tile_loading import TileDownloader
 from mapreader.download.tile_merging import TileMerger
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 
 @pytest.fixture
@@ -38,7 +42,9 @@ def test_init(sheet_downloader):
 
 def test_init_errors(sample_dir):
     test_json = f"{sample_dir}/test_json.json"  # crs changed to EPSG:3857 (note: coordinates are wrong in file)
-    download_url = "https://mapseries-tilesets.s3.amazonaws.com/1inch_2nd_ed/{z}/{x}/{y}.png"
+    download_url = (
+        "https://mapseries-tilesets.s3.amazonaws.com/1inch_2nd_ed/{z}/{x}/{y}.png"
+    )
     with pytest.raises(ValueError, match="file not found"):
         SheetDownloader("fake_file.json", download_url)
     with pytest.raises(ValueError, match="string or list of strings"):
@@ -50,6 +56,11 @@ def test_get_polygons(sheet_downloader):
     sd.get_polygons()
     assert sd.polygons is True
     assert (isinstance(sd.features[i]["polygon"], Polygon) for i in sd.features)
+
+
+# TODO: add a test for when there are multiple geometries in one of the map's
+# features, i.e. when get_polygons is run and only one of the feature's
+# polygons is selected => logger warning for "Multiple geometries found in map"
 
 
 def test_get_grid_bb(sheet_downloader):
@@ -67,7 +78,9 @@ def test_get_grid_bb(sheet_downloader):
 
 def test_get_grid_bb_errors(sample_dir):
     test_json = f"{sample_dir}/test_json_epsg3857.json"  # crs changed to EPSG:3857 (note: coordinates are wrong in file)
-    download_url = "https://mapseries-tilesets.s3.amazonaws.com/1inch_2nd_ed/{z}/{x}/{y}.png"
+    download_url = (
+        "https://mapseries-tilesets.s3.amazonaws.com/1inch_2nd_ed/{z}/{x}/{y}.png"
+    )
     sd = SheetDownloader(test_json, download_url)
     with pytest.raises(NotImplementedError, match="EPSG:4326"):
         sd.get_grid_bb()
@@ -120,14 +133,12 @@ def test_get_merged_polygon(sheet_downloader):
     assert isinstance(sd.merged_polygon, MultiPolygon)
 
 
-def test_get_minmax_latlon(sheet_downloader, capfd):
+def test_get_minmax_latlon(sheet_downloader, caplog):
+    caplog.set_level(logging.INFO)
     sd = sheet_downloader
     sd.get_minmax_latlon()
-    out, _ = capfd.readouterr()
-    assert (
-        out
-        == "[INFO] Min lat: 51.49344796, max lat: 54.2089733 \n[INFO] Min lon: -4.7682, max lon: -0.16093917\n"
-    )
+    assert "Min lat: 51.49344796, max lat: 54.2089733" in caplog.text
+    assert "Min lon: -4.7682, max lon: -0.16093917" in caplog.text
 
 
 # queries
@@ -469,7 +480,8 @@ def test_download_by_wfs_ids(sheet_downloader, tmp_path, mock_response):
     assert df.loc[1, "name"] == "map_101602038.png"
 
 
-def test_download_same_image_names(sheet_downloader, tmp_path, capfd, mock_response):
+def test_download_same_image_names(sheet_downloader, tmp_path, caplog):
+    caplog.set_level(logging.INFO)
     sd = sheet_downloader
     sd.get_grid_bb(14)
     maps_path = tmp_path / "test_maps/"
@@ -495,10 +507,9 @@ def test_download_same_image_names(sheet_downloader, tmp_path, capfd, mock_respo
 
     # run again, nothing should happen
     sd.download_map_sheets_by_wfs_ids([107, 116], maps_path, metadata_fname, force=True)
-    out, _ = capfd.readouterr()
-    assert out.endswith(
-        '[INFO] "map_101603986.png" already exists. Skipping download.\n[INFO] "map_101603986_1.png" already exists. Skipping download.\n'
-    )
+    assert '"map_101603986.png" already exists. Skipping download.' in caplog.text
+    assert '"map_101603986_1.png" already exists. Skipping download.' in caplog.text
+
     df = pd.read_csv(f"{maps_path}/{metadata_fname}", sep=",", index_col=0)
     assert len(df) == 2
 

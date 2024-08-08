@@ -10,8 +10,10 @@ from tqdm import tqdm
 from .data_structures import GridBoundingBox, GridIndex
 from .tile_loading import DEFAULT_IMG_DOWNLOAD_FORMAT, DEFAULT_TEMP_FOLDER
 
+# Set up logging
 logger = logging.getLogger(__name__)
 
+# Default values (constants)
 DEFAULT_OUT_FOLDER = "./"
 DEFAULT_IMG_STORE_FORMAT = ("png", "PNG")
 

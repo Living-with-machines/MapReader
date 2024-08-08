@@ -1,11 +1,15 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
+import logging
 from ast import literal_eval
 from itertools import product
 
 import pandas as pd
 from tqdm import tqdm
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 
 class PostProcessor:
@@ -50,8 +54,8 @@ class PostProcessor:
         if all(
             [col in patch_df.columns for col in ["min_x", "min_y", "max_x", "max_y"]]
         ):
-            print(
-                "[INFO] Using existing pixel bounds columns (min_x, min_y, max_x, max_y)."
+            logger.info(
+                "Using existing pixel bounds columns (min_x, min_y, max_x, max_y)."
             )
         else:
             patch_df[["min_x", "min_y", "max_x", "max_y"]] = [*patch_df["pixel_bounds"]]
@@ -159,10 +163,8 @@ class PostProcessor:
         # add new label to labels_map if not already present (assume label index is next in sequence)
         for new_label in remap.values():
             if new_label not in self.labels_map.values():
-                print(
-                    [
-                        f"[INFO] Adding {new_label} to labels_map at index {len(self.labels_map)}."
-                    ]
+                logger.info(
+                    f"Adding {new_label} to labels_map at index {len(self.labels_map)}."
                 )
                 self.labels_map[len(self.labels_map)] = new_label
 
