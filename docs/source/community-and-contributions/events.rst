@@ -24,7 +24,19 @@ in the Google notes doc for each call.
      - `Notes and Zoom link <https://docs.google.com/document/d/1UE2OjPE7OitoB8AsG4swk1k3pD44lW_YgMkaR4VxUXU/edit>`_
    * - September 5, 2024, 4-5pm UK time
      - `Sign up <https://forms.office.com/e/x9zGL0yQyp>`_
-     - *Coming soon*
+     - Notes and Zoom link - *Coming soon*
+   * - October 31, 2024, 4-5pm UK time
+     - `Sign up <https://forms.office.com/e/x9zGL0yQyp>`_
+     - Notes and Zoom link - *Coming soon*
+   * - December 12, 2024, 4-5pm UK time
+     - `Sign up <https://forms.office.com/e/x9zGL0yQyp>`_
+     - Notes and Zoom link - *Coming soon*
+   * - January 9, 2025, 4-5pm UK time
+     - `Sign up <https://forms.office.com/e/x9zGL0yQyp>`_
+     - Notes and Zoom link - *Coming soon*
+   * - February 6, 2025, 4-5pm UK time
+     - `Sign up <https://forms.office.com/e/x9zGL0yQyp>`_
+     - Notes and Zoom link - *Coming soon*
 
 .. ----- Past community calls -------------------------------------------------
 
