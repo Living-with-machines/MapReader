@@ -15,6 +15,8 @@ This is probably the easiest way to install MapReader.
 
 .. note:: To install the dev dependencies too use ``pip install "mapreader[dev]"`` instead.
 
+To install the text-spotting dependencies, head to the :doc:`Spot text </using-mapreader/step-by-step-guide/6-spot-text>` section of the user guide!
+
 Method 2: Install from source
 -----------------------------
 

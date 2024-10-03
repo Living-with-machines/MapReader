@@ -1,7 +1,11 @@
 Step-by-step Guide to Using MapReader
 ======================================
 
-This guide will walk you through the steps to use MapReader to read and process a map.
+This step-by-step guide provides a logical breakdown of the steps and workflows needed for running the MapReader library.
+
+Users should refer to the :doc:`Introduction to MapReader </introduction-to-mapreader/what-is-mapreader>` page to understand the necessary workflows for the Classification and Text Spotting pipelines.
+
+.. note:: Throughout this user guide, we will use OS maps as examples. **These are provided for illustrative purposes only, users may need to change file paths etc. to suit their own needs.**
 
 .. toctree::
    :maxdepth: 2

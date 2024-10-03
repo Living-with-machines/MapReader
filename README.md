@@ -1,16 +1,13 @@
 # MapReader
 
-**MapReader is a computer vision pipeline for exploring and analyzing images at scale.**
-
 <!-- ALL-CONTRIBUTORS-BADGE:START - Do not remove or modify this section -->
 [![All Contributors](https://img.shields.io/badge/all_contributors-8-orange.svg?style=flat-square)](#contributors)
-<!-- ALL-CONTRIBUTORS-BADGE:END -->
-
 ![PyPI](https://img.shields.io/pypi/v/MapReader)
 ![License](https://img.shields.io/badge/License-MIT-yellow.svg)
 ![Integration Tests badge](https://github.com/Living-with-machines/MapReader/actions/workflows/mr_ci.yml/badge.svg)
 ![DOI](https://zenodo.org/badge/430661738.svg)
 ![CodeCov](https://codecov.io/github/Living-with-machines/MapReader/graph/badge.svg?token=38GQ3O1GB5)
+[![DOI](https://joss.theoj.org/papers/10.21105/joss.06434/status.svg)](https://doi.org/10.21105/joss.06434)
 
 ## Table of Contents
 
@@ -18,7 +15,8 @@
   - [Table of Contents](#table-of-contents)
   - [What is MapReader?](#what-is-mapreader)
   - [Overview](#overview)
-    - [MapReader pipeline](#mapreader-pipeline)
+    - [MapReader classification pipeline](#mapreader-classification-pipeline)
+    - [MapReader text spotting pipeline](#mapreader-classification-pipeline)
   - [Documentation](#documentation)
   - [What is included in this repo?](#what-is-included-in-this-repo)
   - [How to cite MapReader](#how-to-cite-mapreader)
@@ -30,31 +28,36 @@
 
 ## What is MapReader?
 
-MapReader is an end-to-end computer vision (CV) pipeline for exploring and analyzing images at scale.
+**MapReader is a open-source python library for exploring and analyzing map images at scale.**
 
-<figure align="center">
-  <img src="https://raw.githubusercontent.com/Living-with-machines/MapReader/main/docs/source/_static/river_banner_8bit.png"
-      alt="Annotated Map with Prediction Outputs"
-      width="70%">
-</figure>
+It contains two different pipelines:
 
-MapReader was developed in the [Living with Machines](https://livingwithmachines.ac.uk/) project to analyze large collections of historical maps but is a _**generalizable**_ computer vision pipeline which can be applied to _**any images**_ in a wide variety of domains.
+- Classification pipeline: This pipeline enables users to fine-tune a classification model and predict the labels of patches created from a parent image.
+- Text spotting pipeline: This pipeline enables users to detect and recognize text in map images.
+
+MapReader was developed in the [Living with Machines](https://livingwithmachines.ac.uk/) project to analyze large collections of historical maps but is a _**generalizable**_ computer vision tool which can be applied to _**any images**_ in a wide variety of domains.
 
 ## Overview
 
-MapReader is a groundbreaking interdisciplinary tool that emerged from a specific set of geospatial historical research questions. It was inspired by methods in biomedical imaging and geographic information science, which were adapted for use by historians, for example in our [Journal of Victorian Culture](https://doi.org/10.1093/jvcult/vcab009) and [Geospatial Humanities 2022 SIGSPATIAL workshop](https://arxiv.org/abs/2111.15592) papers. The success of the tool subsequently generated interest from plant phenotype researchers working with large image datasets, and so MapReader is an example of cross-pollination between the humanities and the sciences made possible by reproducible data science.
+### MapReader classification pipeline
 
-### MapReader pipeline
-
-The MapReader pipeline consists of a linear sequence of tasks which, together, can be used to train a computer vision (CV) classifier to recognize visual features within maps and identify patches containing these features across entire map collections:
+The MapReader classification pipeline enables users to train a classification model to recognize visual features within map images and to identify patches containing these features across entire map collections:
 
 <figure align="center">
-  <img src="https://raw.githubusercontent.com/Living-with-machines/MapReader/main/docs/source/_static/pipeline_explained.png"
+  <img src="https://raw.githubusercontent.com/maps-as-data/MapReader/main/docs/source/_static/pipeline_explained.png"
         alt="MapReader pipeline"
         width="70%">
 </figure>
 
-See our [Introduction to MapReader](https://mapreader.readthedocs.io/en/latest/introduction-to-mapreader/) page to learn more.
+### MapReader text spotting pipeline
+
+The MapReader text spotting pipeline enables users to detect and recognize text in map images using a pre-trained text spotting model:
+
+<figure align="center">
+  <img src="https://raw.githubusercontent.com/maps-as-data/MapReader/main/docs/source/_static/text-spotting-pipeline.png"
+        alt="MapReader text spotting pipeline"
+        width="70%">
+</figure>
 
 ## Documentation
 
@@ -62,42 +65,42 @@ The MapReader documentation can be found at https://mapreader.readthedocs.io/en/
 
 **New users** should refer to the [Installation instructions](https://mapreader.readthedocs.io/en/latest/getting-started/installation-instructions/index.html) and [Input guidance](https://mapreader.readthedocs.io/en/latest/using-mapreader/input-guidance/) for help with the initial set up of MapReader.
 
-**All users** should refer to our [User Guide](https://mapreader.readthedocs.io/en/latest/using-mapreader/) for guidance on how to use MapReader. This contains end-to-end instructions on how to use the MapReader pipeline, plus a number of worked examples illustrating use cases such as:
-
-- Geospatial images (i.e. maps)
-- Non-geospatial images
+**All users** should refer to our [User Guide](https://mapreader.readthedocs.io/en/latest/using-mapreader/) for guidance on how to use MapReader.
+This contains end-to-end instructions on how to use the MapReader pipeline.
 
  **Developers and contributors** may also want to refer to the [API documentation](https://mapreader.readthedocs.io/en/latest/in-depth-resources/api/mapreader/) and [Contribution guide](https://mapreader.readthedocs.io/en/latest/community-and-contributions/contribution-guide/) for guidance on how to contribute to the MapReader package.
+
+
+## Stay in touch
+
+**All users** are encouraged to join our community! Please refer to the [Community and contributions](https://mapreader.readthedocs.io/en/latest/community-and-contributions/events.html) page for information on ways to get involved.
 
 **Join our Slack workspace!**
 Please fill out [this form](https://forms.gle/dXjECHZQkwrZ3Xpt9) to receive an invitation to the Slack workspace.
 
 ## What is included in this repo?
 
-The MapReader package provides a set of tools to:
+This repository contains everything needed for running MapReader.
 
-- **Download** images/maps and metadata stored on web-servers (e.g. tileservers which can be used to retrieve maps from OpenStreetMap (OSM), the National Library of Scotland (NLS), or elsewhere).
-- **Load** images/maps and metadata stored locally.
-- **Pre-process** images/maps:
-  - patchify (create patches from a parent image),
-  - resample (use image transformations to alter pixel-dimensions/resolution/orientation/etc.),
-  - remove borders outside the neatline,
-  - reproject between coordinate reference systems (CRS).
-- **Annotate** images/maps (or their patches) using an interactive annotation tool.
-- **Train or fine-tune** Computer Vision (CV) models and use these to **predict** labels (i.e. model inference) on large sets of images/maps.
+The repository is structured as follows:
 
-Various **plotting and analysis** functionalities are also included (based on packages such as _matplotlib_, _cartopy_, _Google Earth_, and _[kepler.gl](https://kepler.gl/))_.
+- `mapreader/`: Contains the source code for the MapReader library.
+- `docs/`: Contains the documentation for the MapReader library.
+- `tests/` and `test_text_spotting/`: Contains the tests for the MapReader library.
+- `worked_examples/`: Contains worked examples of how to use the MapReader library.
 
 ## How to cite MapReader
 
-If you use MapReader in your work, please cite both the MapReader repo and [our SIGSPATIAL paper](https://dl.acm.org/doi/10.1145/3557919.3565812):
+If you use MapReader in your work, please cite:
+- Our [JOSS paper](https://doi.org/10.21105/joss.06434) - to acknowledge the software irrespective of the version you used.
+- Our [Zenodo record](https://zenodo.org/records/13643609) - to acknowledge the specific version of the software you used (or use the "Cite all versions?" option if your specific version isn't there).
+- Optionally, our [SIGSPATIAL paper](https://dl.acm.org/doi/10.1145/3557919.3565812) to acknowledge the development of the software and the research behind it.
 
-- Kasra Hosseini, Daniel C. S. Wilson, Kaspar Beelen, and Katherine McDonough. 2022. MapReader: a computer vision pipeline for the semantic exploration of maps at scale. In Proceedings of the 6th ACM SIGSPATIAL International Workshop on Geospatial Humanities (GeoHumanities '22). Association for Computing Machinery, New York, NY, USA, 8–19. https://doi.org/10.1145/3557919.3565812
-- Kasra Hosseini, Rosie Wood, Andy Smith, Katie McDonough, Daniel C.S. Wilson, Christina Last, Kalle Westerling, and Evangeline Mae Corcoran. “Living-with-machines/mapreader: End of Lwm”. Zenodo, July 27, 2023. https://doi.org/10.5281/zenodo.8189653.
+<!-- Add bibtext entries for the papers here -->
 
 ## Acknowledgements
 
-This work was supported by Living with Machines (AHRC grant AH/S01179X/1) and The Alan Turing Institute (EPSRC grant EP/N510129/1).
+This work was supported by Living with Machines (AHRC grant AH/S01179X/1), Data/Culture (AHRC grant AH/Y00745X/1) and The Alan Turing Institute (EPSRC grant EP/N510129/1).
 
 Living with Machines, funded by the UK Research and Innovation (UKRI) Strategic Priority Fund, is a multidisciplinary collaboration delivered by the Arts and Humanities Research Council (AHRC), with The Alan Turing Institute, the British Library and the Universities of Cambridge, East Anglia, Exeter, and Queen Mary University of London.
 

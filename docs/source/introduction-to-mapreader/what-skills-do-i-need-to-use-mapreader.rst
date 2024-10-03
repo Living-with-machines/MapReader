@@ -6,5 +6,4 @@ What skills/knowledge do I need to use MapReader?
 - Basic Python
 - Basic understanding of machine learning and computer vision (CV) methodology
 
-..
-    Add something here about how we have resources for you to learn these skills.
+Users who are interested in using MapReader but do not yet have these skills are encourage to refer to our :doc:`in-depth-resources/coding-basics` section for resources on learning these skills.
