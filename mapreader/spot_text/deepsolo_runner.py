@@ -33,7 +33,7 @@ class DeepSoloRunner(RecRunner):
     def __init__(
         self,
         patch_df: pd.DataFrame | gpd.GeoDataFrame | str | pathlib.Path,
-        parent_df: pd.DataFrame | gpd.GeoDataFrame | str | pathlib.Path = None,
+        parent_df: pd.DataFrame | gpd.GeoDataFrame | str | pathlib.Path | None = None,
         cfg_file: str
         | pathlib.Path = "./DeepSolo/configs/R_50/IC15/finetune_150k_tt_mlt_13_15_textocr.yaml",
         weights_file: str

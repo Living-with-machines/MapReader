@@ -35,7 +35,7 @@ class MapTextRunner(RecRunner):
     def __init__(
         self,
         patch_df: pd.DataFrame | gpd.GeoDataFrame | str | pathlib.Path,
-        parent_df: pd.DataFrame | gpd.GeoDataFrame | str | pathlib.Path = None,
+        parent_df: pd.DataFrame | gpd.GeoDataFrame | str | pathlib.Path | None = None,
         cfg_file: str
         | pathlib.Path = "./MapTextPipeline/configs/ViTAEv2_S/rumsey/final_rumsey.yaml",
         weights_file: str | pathlib.Path = "./rumsey-finetune.pth",

@@ -521,6 +521,11 @@ Please check your image paths and update them if necessary.'
             raise ValueError("[ERROR] No annotations loaded.")
 
         annot2plot = self.annotations[self.annotations[self.label_col] == label_to_show]
+
+        if len(annot2plot) == 0:
+            print(f'[INFO] No annotations found for label "{label_to_show}".')
+            return
+
         annot2plot = annot2plot.sample(frac=1)
         annot2plot.reset_index(drop=False, inplace=True)
 

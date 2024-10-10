@@ -10,10 +10,12 @@ import matplotlib.patches as patches
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import xyzservices as xyz
 from PIL import Image
 from shapely import Polygon
 from tqdm.auto import tqdm
 
+from mapreader import MapImages
 from mapreader.utils.load_frames import load_from_csv, load_from_geojson
 
 
@@ -61,7 +63,10 @@ class Runner:
                 "[ERROR] ``patch_df`` must be a path to a CSV/TSV/etc or geojson file, a pandas DataFrame or a geopandas GeoDataFrame."
             )
 
-        if isinstance(parent_df, pd.DataFrame):
+        if parent_df is None:
+            self.parent_df = pd.DataFrame()  # empty dataframe
+
+        elif isinstance(parent_df, pd.DataFrame):
             self.parent_df = parent_df
 
         elif isinstance(parent_df, (str, pathlib.Path)):
@@ -82,6 +87,28 @@ class Runner:
             raise ValueError(
                 "[ERROR] ``parent_df`` must be a path to a CSV/TSV/etc or geojson file, a pandas DataFrame or a geopandas GeoDataFrame."
             )
+
+        self.check_georeferencing()
+
+    def check_georeferencing(self):
+        if "coordinates" in self.parent_df.columns:
+            if "dlat" in self.parent_df.columns and "dlon" in self.parent_df.columns:
+                self.georeferenced = True
+            else:
+                self._add_coord_increments()
+                self.check_georeferencing()
+        else:
+            print(
+                "[WARNING] Will not be able to georeference results, please ensure parent_df has 'coordinates' column."
+            )
+            self.georeferenced = False
+
+    def _add_coord_increments(self):
+        maps = MapImages()
+        maps.load_df(self.parent_df)
+        maps.add_coord_increments()
+        parent_df, _ = maps.convert_images()
+        self.parent_df = parent_df
 
     def run_all(
         self,
@@ -352,6 +379,12 @@ class Runner:
         dict or gpd.GeoDataFrame
             A dictionary of predictions for each parent image or a DataFrame if `return_dataframe` is True.
         """
+        self.check_georeferencing()
+        if not self.georeferenced:
+            raise ValueError(
+                "[ERROR] Cannot convert to coordinates as parent_df does not have 'coordinates' column."
+            )
+
         if self.parent_predictions == {}:
             print("[INFO] Converting patch pixel bounds to parent pixel bounds.")
             _ = self.convert_to_parent_pixel_bounds()
@@ -395,18 +428,20 @@ class Runner:
         save_path : str | pathlib.Path, optional
             Path to save the GeoJSON file
         """
+        if self.geo_predictions == {}:
+            raise ValueError(
+                "[ERROR] No georeferenced predictions found. Run `convert_to_coords` first."
+            )
 
         geo_df = self._dict_to_dataframe(self.geo_predictions, geo=True, parent=True)
         geo_df.to_file(save_path, driver="GeoJSON", engine="pyogrio")
 
-    def show(
+    def show_predictions(
         self,
         image_id: str,
-        figsize: tuple | None = (10, 10),
+        figsize: tuple = (10, 10),
         border_color: str | None = "r",
         text_color: str | None = "b",
-        image_width_resolution: int | None = None,
-        return_fig: bool = False,
     ) -> None:
         """Show the predictions on an image.
 
@@ -420,15 +455,6 @@ class Runner:
             The color of the border of the polygons, by default "r"
         text_color : str | None, optional
             The color of the text, by default "b"
-        image_width_resolution : int | None, optional
-            The maximum resolution of the image width, by default None
-        return_fig : bool, optional
-            Whether to return the figure, by default False
-
-        Returns
-        -------
-        fig
-            The matplotlib figure if `return_fig` is True.
 
         Raises
         ------
@@ -446,28 +472,25 @@ class Runner:
 
         else:
             raise ValueError(
-                f"[ERROR] {image_id} not found in patch or parent predictions."
+                f"[ERROR] {image_id} not found in patch or parent predictions. Check your ID is valid or try running `convert_to_parent_pixel_bounds` first."
             )
 
         img = Image.open(image_path)
 
-        # if image_width_resolution is specified, resize the image
-        if image_width_resolution:
-            new_width = int(image_width_resolution)
-            rescale_factor = new_width / img.width
-            new_height = int(img.height * rescale_factor)
-            img = img.resize((new_width, new_height), Image.LANCZOS)
-
-        fig = plt.figure(figsize=figsize)
-        ax = plt.gca()
+        fig, ax = plt.subplots(figsize=figsize)
+        ax.axis("off")
 
         # check if grayscale
         if len(img.getbands()) == 1:
             ax.imshow(img, cmap="gray", vmin=0, vmax=255, zorder=1)
         else:
             ax.imshow(img, zorder=1)
+        ax.set_title(image_id)
 
         for instance in preds[image_id]:
+            # Instance is:
+            # - [geometry, text, score] for det/rec
+            # - [geometry, score] for det only
             polygon = np.array(instance[0].exterior.coords.xy)
             center = instance[0].centroid.coords.xy
             patch = patches.Polygon(polygon.T, edgecolor=border_color, facecolor="none")
@@ -476,8 +499,36 @@ class Runner:
                 center[0][0], center[1][0], instance[1], fontsize=8, color=text_color
             )
 
-        plt.axis("off")
-        plt.title(image_id)
+        fig.show()
 
-        if return_fig:
-            return fig
+    def explore_predictions(
+        self,
+        parent_id: str,
+        xyz_url: str | None = None,
+        style_kwargs: dict | None = None,
+    ):
+        self.check_georeferencing()
+        if not self.georeferenced:
+            raise ValueError(
+                "[ERROR] This method only works for georeferenced results. Please ensure parent_df has 'coordinates' column and run `convert_to_coords` first."
+            )
+
+        if parent_id not in self.geo_predictions.keys():
+            raise ValueError(
+                f"[ERROR] {parent_id} not found in geo predictions. Check your ID is valid or try running `convert_to_coords` first."
+            )
+
+        if style_kwargs is None:
+            style_kwargs = {"fillOpacity": 0.2}
+
+        if xyz_url:
+            tiles = xyz.TileProvider(name=xyz_url, url=xyz_url, attribution=xyz_url)
+        else:
+            tiles = xyz.providers.OpenStreetMap.Mapnik
+
+        preds_df = self._dict_to_dataframe(self.geo_predictions, geo=True, parent=True)
+
+        return preds_df[preds_df["image_id"] == parent_id].explore(
+            tiles=tiles,
+            style_kwds=style_kwargs,
+        )

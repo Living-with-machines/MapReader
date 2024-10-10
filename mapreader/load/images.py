@@ -14,12 +14,12 @@ from ast import literal_eval
 from glob import glob
 from typing import Literal
 
-import matplotlib.patches as patches
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import PIL
 import rasterio
+import xyzservices as xyz
 from PIL import Image, ImageOps, ImageStat
 from pyproj import Transformer
 from rasterio.plot import reshape_as_raster
@@ -113,12 +113,24 @@ class MapImages:
             "coordinates" in self.parents[parent_id].keys()
             for parent_id in self.list_parents()
         ):
+            self.add_parent_polygons(tqdm_kwargs={"disable": True})
+            self.add_patch_coords(tqdm)
+            self.add_patch_polygons(tqdm_kwargs={"disable": True})
             self.georeferenced = True
-            self.add_parent_polygons()
-            self.add_patch_coords()
-            self.add_patch_polygons()
         else:
-            self.georeferenced = False
+            try:
+                self.add_coords_from_grid_bb(
+                    tqdm_kwargs={"disable": True}
+                )  # try to add parent coords using grid_bb
+            except ValueError:
+                try:
+                    self.infer_parent_coords_from_patches(
+                        tqdm_kwargs={"disable": True}
+                    )  # if not, try to add parent coords using patch coords
+                except ValueError:
+                    self.georeferenced = False  # give up
+                    return
+            self.check_georeferencing()  # check again
 
     @staticmethod
     def _resolve_file_path(file_path: str, file_ext: str | None = None):
@@ -200,7 +212,7 @@ class MapImages:
         self,
         image_path: str,
         parent_path: str | None = None,
-        tree_level: str | None = "parent",
+        tree_level: str = "parent",
         **kwargs: dict,
     ) -> None:
         """
@@ -330,8 +342,8 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
         index_col: int | str | None = 0,
         delimiter: str | None = ",",
         usecols: list[str] | None = None,
-        tree_level: str | None = "parent",
-        ignore_mismatch: bool | None = False,
+        tree_level: str = "parent",
+        ignore_mismatch: bool = False,
     ) -> None:
         """
         Add metadata information to the ``images`` dictionary property.
@@ -493,14 +505,13 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
                     except:
                         self.images[tree_level][key][column] = item
 
-        if tree_level == "parent":
-            self.check_georeferencing()
+        self.check_georeferencing()
 
     def show_sample(
         self,
-        num_samples: int,
-        tree_level: str | None = "patch",
-        random_seed: int | None = 65,
+        num_samples: int = 6,
+        tree_level: str = "patch",
+        random_seed: int = 42,
         **kwargs: dict,
     ) -> None:
         """
@@ -509,13 +520,13 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
 
         Parameters
         ----------
-        num_samples : int
-            The number of images to display.
+        num_samples : int, optional
+            The number of images to display. Default is ``6``.
         tree_level : str, optional
             The level of the hierarchy to display images from, which can be
             ``"patch"`` or ``"parent"``. By default "patch".
         random_seed : int, optional
-            The random seed to use for reproducibility. Default is ``65``.
+            The random seed to use for reproducibility. Default is ``42``.
         **kwargs : dict, optional
             Additional keyword arguments to pass to
             ``matplotlib.pyplot.figure()``.
@@ -559,7 +570,9 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
         """Return list of all patches"""
         return list(self.patches.keys())
 
-    def add_shape(self, tree_level: str | None = "parent") -> None:
+    def add_shape(
+        self, tree_level: str = "parent", tqdm_kwargs: dict | None = None
+    ) -> None:
         """
         Add a shape to each image in the specified level of the image
         hierarchy.
@@ -569,6 +582,8 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
         tree_level : str, optional
             The level of the hierarchy to add shapes to, either ``"parent"``
             (default) or ``"patch"``.
+        tqdm_kwargs : dict, optional
+            Additional keyword arguments to pass to the ``tqdm`` progress bar. By default, ``None``.
 
         Returns
         -------
@@ -581,26 +596,69 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
         """
         print(f"[INFO] Add shape, tree level: {tree_level}")
 
-        image_ids = list(self.images[tree_level].keys())
+        if tqdm_kwargs is None:
+            tqdm_kwargs = {}
+
+        image_ids = list(self.images[tree_level].keys(), **tqdm_kwargs)
         for image_id in image_ids:
             self._add_shape_id(image_id=image_id)
 
-    def add_coords_from_grid_bb(self, verbose: bool = False) -> None:
-        print("[INFO] Adding coordinates, tree level: parent")
+    def add_coords_from_grid_bb(
+        self, verbose: bool = False, tqdm_kwargs: dict | None = None
+    ) -> None:
+        """Add coordinates to parent images using grid bounding boxes.
 
+        Parameters
+        ----------
+        verbose : bool, optional
+            Whether to print verbose outputs. By default, ``False``.
+        tqdm_kwargs : dict, optional
+            Additional keyword arguments to pass to the ``tqdm`` progress bar. By default, ``None``.
+
+        Raises
+        ------
+        ValueError
+            If no grid bounding box found for a parent image.
+        """
         parent_list = self.list_parents()
 
-        for parent_id in parent_list:
+        if tqdm_kwargs is None:
+            tqdm_kwargs = {}
+
+        for parent_id in tqdm(parent_list, **tqdm_kwargs):
             if "grid_bb" not in self.parents[parent_id].keys():
                 raise ValueError(
                     f"[ERROR] No grid bounding box found for {parent_id}. Suggestion: run `add_metadata` or `add_geo_info`."
                 )
 
             self._add_coords_from_grid_bb_id(image_id=parent_id, verbose=verbose)
-            self.georeferenced = True
-            self.add_patch_coords()
 
-    def add_coord_increments(self, verbose: bool | None = False) -> None:
+    def infer_parent_coords_from_patches(
+        self, verbose: bool = False, tqdm_kwargs: dict | None = None
+    ) -> None:
+        """
+        Infers parent coordinates from patches.
+
+        Parameters
+        ----------
+        verbose : bool, optional
+            Whether to print verbose outputs.
+            By default, ``False``
+        tqdm_kwargs : dict, optional
+            Additional keyword arguments to pass to the ``tqdm`` progress bar. By default, ``None``.
+        """
+        parent_list = self.list_parents()
+
+        if tqdm_kwargs is None:
+            tqdm_kwargs = {}
+
+        for parent_id in tqdm(parent_list, **tqdm_kwargs):
+            if "coordinates" not in self.parents[parent_id].keys():
+                self._infer_parent_coords_from_patches_id(parent_id, verbose)
+
+    def add_coord_increments(
+        self, verbose: bool = False, tqdm_kwargs: dict | None = None
+    ) -> None:
         """
         Adds coordinate increments to each image at the parent level.
 
@@ -608,6 +666,8 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
         ----------
         verbose : bool, optional
             Whether to print verbose outputs, by default ``False``.
+        tqdm_kwargs : dict, optional
+            Additional keyword arguments to pass to the ``tqdm`` progress bar. By default, ``None``.
 
         Returns
         -------
@@ -625,7 +685,10 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
 
         parent_list = self.list_parents()
 
-        for parent_id in parent_list:
+        if tqdm_kwargs is None:
+            tqdm_kwargs = {}
+
+        for parent_id in tqdm(parent_list, **tqdm_kwargs):
             if "coordinates" not in self.parents[parent_id].keys():
                 raise ValueError(
                     f"[ERROR] No coordinates found for {parent_id}. Suggestion: run `add_metadata` or `add_geo_info`."  # noqa
@@ -633,7 +696,9 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
 
             self._add_coord_increments_id(image_id=parent_id, verbose=verbose)
 
-    def add_patch_coords(self, verbose: bool = False) -> None:
+    def add_patch_coords(
+        self, verbose: bool = False, tqdm_kwargs: dict | None = None
+    ) -> None:
         """Add coordinates to all patches in patches dictionary.
 
         Parameters
@@ -641,13 +706,20 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
         verbose : bool, optional
             Whether to print verbose outputs.
             By default, ``False``
+        tqdm_kwargs : dict, optional
+            Additional keyword arguments to pass to the ``tqdm`` progress bar. By default, ``None``.
         """
         patch_list = self.list_patches()
 
-        for patch_id in tqdm(patch_list):
+        if tqdm_kwargs is None:
+            tqdm_kwargs = {}
+
+        for patch_id in tqdm(patch_list, **tqdm_kwargs):
             self._add_patch_coords_id(patch_id, verbose)
 
-    def add_patch_polygons(self, verbose: bool = False) -> None:
+    def add_patch_polygons(
+        self, verbose: bool = False, tqdm_kwargs: dict | None = None
+    ) -> None:
         """Add polygon to all patches in patches dictionary.
 
         Parameters
@@ -655,14 +727,22 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
         verbose : bool, optional
             Whether to print verbose outputs.
             By default, ``False``
+        tqdm_kwargs : dict, optional
+            Additional keyword arguments to pass to the ``tqdm`` progress bar. By default, ``None``.
         """
         patch_list = self.list_patches()
 
-        for patch_id in tqdm(patch_list):
+        if tqdm_kwargs is None:
+            tqdm_kwargs = {}
+
+        for patch_id in tqdm(patch_list, **tqdm_kwargs):
             self._add_patch_polygons_id(patch_id, verbose)
 
     def add_center_coord(
-        self, tree_level: str | None = "patch", verbose: bool | None = False
+        self,
+        tree_level: str = "patch",
+        verbose: bool = False,
+        tqdm_kwargs: dict | None = None,
     ) -> None:
         """
         Adds center coordinates to each image at the specified tree level.
@@ -674,6 +754,8 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
             be either ``"parent"`` or ``"patch"`` (default).
         verbose: bool, optional
             Whether to print verbose outputs, by default ``False``.
+        tqdm_kwargs : dict, optional
+            Additional keyword arguments to pass to the ``tqdm`` progress bar. By default, ``None``.
 
         Returns
         -------
@@ -691,7 +773,10 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
 
         image_ids = list(self.images[tree_level].keys())
 
-        for image_id in image_ids:
+        if tqdm_kwargs is None:
+            tqdm_kwargs = {}
+
+        for image_id in tqdm(image_ids, **tqdm_kwargs):
             if tree_level == "parent":
                 if "coordinates" not in self.parents[image_id].keys():
                     raise ValueError(
@@ -708,7 +793,9 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
 
             self._add_center_coord_id(image_id=image_id, verbose=verbose)
 
-    def add_parent_polygons(self, verbose: bool = False) -> None:
+    def add_parent_polygons(
+        self, verbose: bool = False, tqdm_kwargs: dict | None = None
+    ) -> None:
         """Add polygon to all parents in parents dictionary.
 
         Parameters
@@ -716,15 +803,20 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
         verbose : bool, optional
             Whether to print verbose outputs.
             By default, ``False``
+        tqdm_kwargs : dict, optional
+            Additional keyword arguments to pass to the ``tqdm`` progress bar. By default, ``None``.
         """
         parent_list = self.list_parents()
 
-        for parent_id in tqdm(parent_list):
+        if tqdm_kwargs is None:
+            tqdm_kwargs = {}
+
+        for parent_id in tqdm(parent_list, **tqdm_kwargs):
             self._add_parent_polygons_id(parent_id, verbose)
 
     def _add_shape_id(
         self,
-        image_id: int | str,
+        image_id: str,
     ) -> None:
         """
         Add shape (image_height, image_width, image_channels) of the image
@@ -732,7 +824,7 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
 
         Parameters
         ----------
-        image_id : int or str
+        image_id : str
             The ID of the image to add shape metadata to.
 
         Returns
@@ -785,8 +877,35 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
         else:
             raise ValueError(f"[ERROR] Unexpected grid_bb format for {image_id}.")
 
+    def _infer_parent_coords_from_patches_id(
+        self, image_id: str, verbose: bool = False
+    ) -> None:
+        if "patches" not in self.parents[image_id].keys():
+            raise ValueError(
+                f"[ERROR] No patches found for {image_id}. Unable to infer parent coordinates."
+            )
+
+        _, patch_df = self.convert_images()
+        patch_df = patch_df[patch_df["parent_id"] == image_id]
+
+        for patch_id in patch_df.index:
+            if "coordinates" not in self.patches[patch_id].keys():
+                self._add_patch_coords_id(patch_id, verbose)
+
+        if isinstance(patch_df, gpd.GeoDataFrame):
+            parent_polygon = patch_df.unary_union
+            parent_coords = parent_polygon.bounds
+
+            self.parents[image_id]["coordinates"] = parent_coords
+            self.parents[image_id]["crs"] = patch_df.crs.to_string()
+            self.parents[image_id]["geometry"] = parent_polygon
+        else:
+            raise ValueError(
+                f"[ERROR] No coordinates info found for patches of {image_id}. Unable to infer parent coordinates."
+            )
+
     def _add_coord_increments_id(
-        self, image_id: int | str, verbose: bool | None = False
+        self, image_id: str, verbose: bool | None = False
     ) -> None:
         """
         Add pixel-wise delta longitude (``dlon``) and delta latitude
@@ -795,7 +914,7 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
 
         Parameters
         ----------
-        image_id : int or str
+        image_id : str
             The ID of the image to add coordinate increments metadata to.
         verbose : bool, optional
             Whether to print warning messages when coordinate or shape
@@ -834,7 +953,7 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
 
         if "coordinates" not in self.parents[image_id].keys():
             self._print_if_verbose(
-                f"[WARNING]'coordinates' could not be found in {image_id}. Suggestion: run add_metadata or add_geo_info.",
+                f"[WARNING] 'coordinates' could not be found in {image_id}. Suggestion: run `add_metadata` or `add_geo_info`.",
                 verbose,
             )
             return
@@ -873,7 +992,7 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
 
         if "coordinates" not in self.parents[parent_id].keys():
             self._print_if_verbose(
-                f"[WARNING] No coordinates found in  {parent_id} (parent of {image_id}). Suggestion: run add_metadata or add_geo_info.",
+                f"[WARNING] No coordinates found in  {parent_id} (parent of {image_id}). Suggestion: run `add_metadata` or `add_geo_info`.",
                 verbose,
             )
             return
@@ -949,7 +1068,7 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
         if "coordinates" not in self.images[tree_level][image_id].keys():
             if tree_level == "parent":
                 self._print_if_verbose(
-                    f"[WARNING] No coordinates found for {image_id}. Suggestion: run add_metadata or add_geo_info.",
+                    f"[WARNING] No coordinates found for {image_id}. Suggestion: run `add_metadata` or `add_geo_info`.",
                     verbose,
                 )
                 return
@@ -983,9 +1102,9 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
         -------
         None
         """
-        if not self.georeferenced:
+        if "coordinates" not in self.parents[image_id].keys():
             raise ValueError(
-                "[ERROR] No georeferencing information found. Suggestion: run add_metadata or add_geo_info."
+                "[ERROR] No coordinate information found. Suggestion: run `add_metadata` or `add_geo_info`."
             )
 
         coords = self.parents[image_id]["coordinates"]
@@ -1032,7 +1151,7 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
 
         if "coordinates" not in self.parents[parent_id].keys():
             print(
-                f"[WARNING] 'coordinates' could not be found in {parent_id}. Suggestion: run add_metadata or add_geo_info."  # noqa
+                f"[WARNING] 'coordinates' could not be found in {parent_id}. Suggestion: run `add_metadata` or `add_geo_info`."  # noqa
             )
             return
 
@@ -1612,360 +1731,170 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
 
         return parent_df, patch_df
 
-    def show_parent(
+    def explore_patches(
         self,
         parent_id: str,
         column_to_plot: str | None = None,
-        **kwargs: dict,
-    ) -> None:
+        xyz_url: str | None = None,
+        categorical: bool = False,
+        cmap: str = "viridis",
+        vmin: float | None = None,
+        vmax: float | None = None,
+        style_kwargs: dict | None = None,
+    ):
         """
-        A wrapper method for :meth:`~.load.images.MapImages.show` which plots
-        all patches of a specified parent (`parent_id`).
+        Explore patches of a parent image. This method only works with georeferenced images.
 
         Parameters
         ----------
         parent_id : str
-            ID of the parent image to be plotted.
-        column_to_plot : str, optional
-            Column whose values will be plotted on patches, by default ``None``.
-        **kwargs: Dict
-            Key words to pass to :meth:`~.load.images.MapImages.show` method.
-            See help text for :meth:`~.load.images.MapImages.show` for more
-            information.
+            The ID of the parent image to explore.
+        column_to_plot : str | None, optional
+            The column values to plot on patches. If None, plot just the patch bounding boxes.
+            By default None.
+        xyz_url : str | None, optional
+            The XYZ URL of the tilelayer to use as a baselayer for the map. If None, will default to OpenStreetMap.Mapnik. By default None.
+        categorical : bool, optional
+            Whether the column to plot is categorical or not. By default False.
+        cmap : str, optional
+            The colormap to use when plotting column values. By default "viridis".
+        vmin : float | None, optional
+            The minimum value of the colormap. If `None`, will use the minimum value in the data. By default `None`.
+        vmax : float | None, optional
+            The maximum value of the colormap. If `None`, will use the minimum value in the data. By default `None`.
+        style_kwargs : dict | None, optional
+            A dictionary of style keyword arguments to pass to the folium style_function. By default None.
 
         Returns
         -------
-        list
-            A list of figures created by the method.
+        folium.Map
+            The folium map object with the patches plotted.
+        """
+        if parent_id not in self.list_parents():
+            raise ValueError(f"[ERROR] {parent_id} not found in parent list.")
+
+        if style_kwargs is None:
+            style_kwargs = {}
+
+        if self.georeferenced:
+            if xyz_url:
+                tiles = xyz.TileProvider(name=xyz_url, url=xyz_url, attribution=xyz_url)
+            else:
+                tiles = xyz.providers.OpenStreetMap.Mapnik
+
+            _, patch_df = self.convert_images()
+
+            if "image_id" in patch_df.columns:
+                patch_df.drop(columns=["image_id"], inplace=True)
+
+            if column_to_plot:  # plot column values
+                return patch_df[patch_df["parent_id"] == parent_id].explore(
+                    column=column_to_plot,
+                    tiles=tiles,
+                    categorical=categorical,
+                    cmap=cmap,
+                    vmin=vmin,
+                    vmax=vmax,
+                    style_kwds=style_kwargs,
+                )
+            else:  # plot patches (i.e. bounding boxes)
+                return patch_df[patch_df["parent_id"] == parent_id].explore(
+                    tiles=tiles,
+                    style_kwds=style_kwargs,
+                )
+
+        else:
+            raise NotImplementedError(
+                "[ERROR] This method only works with georeferenced images. Either add coordinate information or use the `show_patches` method."
+            )
+
+    def show_patches(
+        self,
+        parent_id: str,
+        column_to_plot: str | None = None,
+        figsize: tuple = (10, 10),
+        alpha: float = 0.5,
+        categorical: bool = False,
+        cmap: str = "viridis",
+        vmin: float | None = None,
+        vmax: float | None = None,
+        style_kwargs: dict | None = None,
+    ):
+        """Plot patches of a parent image using matplotlib. This method works for both georeferenced and non-georeferenced images.
+
+        Parameters
+        ----------
+        parent_id : str
+            The ID of the parent image to plot.
+        column_to_plot : str | None, optional
+            The column values to plot on patches. If None, plot just the patch bounding boxes.
+        figsize : tuple, optional
+            The size of the figure to be plotted. By default, (10,10).
+        alpha : float, optional
+            Transparency level for plotting patches, by default 0.5.
+        categorical : bool, optional
+            Whether the column to plot is categorical or not. By default False.
+        cmap : str, optional
+            The colormap to use when plotting column values. By default "viridis".
+        vmin : float | None, optional
+            The minimum value of the colormap. If `None`, will use the minimum value in the data. By default `None`.
+        vmax : float | None, optional
+            The maximum value of the colormap. If `None`, will use the minimum value in the data. By default `None`.
+        style_kwargs : dict | None, optional
+            A dictionary of style keyword arguments to pass to matplotlib.pyplot.plot. By default None.
+
+        Returns
+        -------
+        matplotlib.axes.Axes
+            The matplotlib axes object with the patches plotted.
 
         Notes
         -----
-        This is a wrapper method. See the documentation of the
-        :meth:`~.load.images.MapImages.show` method for more detail.
+        Users with georeferenced images may wish to use the `explore_patches` method instead.
         """
-        patch_ids = self.parents[parent_id]["patches"]
-        figures = self.show(patch_ids, column_to_plot=column_to_plot, **kwargs)
+        image_path = self.parents[parent_id]["image_path"]
+        img = Image.open(image_path)
 
-        return figures
+        if style_kwargs is None:
+            style_kwargs = {}
+        style_kwargs.pop("alpha", None)  # remove alpha from style_kwargs, if present
 
-    def show(
-        self,
-        image_ids: str | list[str],
-        column_to_plot: str | None = None,
-        figsize: tuple | None = (10, 10),
-        plot_parent: bool | None = True,
-        patch_border: bool | None = True,
-        border_color: str | None = "r",
-        vmin: float | None = None,
-        vmax: float | None = None,
-        alpha: float | None = 1.0,
-        cmap: str | None = "viridis",
-        discrete_cmap: int | None = 256,
-        plot_histogram: bool | None = False,
-        save_kml_dir: bool | str | None = False,
-        image_width_resolution: int | None = None,
-        kml_dpi_image: int | None = None,
-    ) -> None:
-        """
-        Plot images from a list of ``image_ids``.
+        fig, ax = plt.subplots(figsize=figsize)
+        ax.axis("off")
 
-        Parameters
-        ----------
-        image_ids : str or list
-            Image ID or list of image IDs to be plotted.
-        column_to_plot : str, optional
-            Column whose values will be plotted on patches, by default ``None``.
-        plot_parent : bool, optional
-            If ``True``, parent image will be plotted in background, by
-            default ``True``.
-        figsize : tuple, optional
-            The size of the figure to be plotted. By default, ``(10,10)``.
-        patch_border : bool, optional
-            If ``True``, a border will be placed around each patch, by
-            default ``True``.
-        border_color : str, optional
-            The color of the border. Default is ``"r"``.
-        vmin : float, optional
-            The minimum value for the colormap.
-            If ``None``, will be set to minimum value in ``column_to_plot``, by default ``None``.
-        vmax : float, optional
-            The maximum value for the colormap.
-            If ``None``, will be set to the maximum value in ``column_to_plot``, by default ``None``.
-        alpha : float, optional
-            Transparency level for plotting ``value`` with floating point
-            values ranging from 0.0 (transparent) to 1 (opaque), by default ``1.0``.
-        cmap : str, optional
-            Color map used to visualize chosen ``column_to_plot`` values, by default ``"viridis"``.
-        discrete_cmap : int, optional
-            Number of discrete colors to use in color map, by default ``256``.
-        plot_histogram : bool, optional
-            If ``True``, plot histograms of the ``value`` of images. By default ``False``.
-        save_kml_dir : str or bool, optional
-            If ``True``, save KML files of the images. If a string is provided,
-            it is the path to the directory in which to save the KML files. If
-            set to ``False``, no files are saved. By default ``False``.
-        image_width_resolution : int or None, optional
-            The pixel width to be used for plotting. If ``None``, the
-            resolution is not changed. Default is ``None``.
-
-            Note: Only relevant when ``tree_level="parent"``.
-        kml_dpi_image : int or None, optional
-            The resolution, in dots per inch, to create KML images when
-            ``save_kml_dir`` is specified (as either ``True`` or with path).
-            By default ``None``.
-
-        Returns
-        -------
-        list
-            A list of figures created by the method.
-        """
-        # create list, if not already a list
-        if isinstance(image_ids, str):
-            image_ids = [image_ids]
-
-        if not isinstance(image_ids, list):
-            raise ValueError("[ERROR] Please pass image_ids as str or list of strings.")
-
-        if all(self._get_tree_level(image_id) == "parent" for image_id in image_ids):
-            tree_level = "parent"
-        elif all(self._get_tree_level(image_id) == "patch" for image_id in image_ids):
-            tree_level = "patch"
+        # check if grayscale
+        if len(img.getbands()) == 1:
+            ax.imshow(img, cmap="gray", vmin=0, vmax=255, zorder=1)
         else:
-            raise ValueError("[ERROR] Image IDs must all be at the same tree level")
+            ax.imshow(img, zorder=1)
+        ax.set_title(parent_id)
 
-        figures = []
-        if tree_level == "parent":
-            for image_id in tqdm(image_ids):
-                image_path = self.parents[image_id]["image_path"]
-                img = Image.open(image_path)
+        _, patch_df = self.convert_images()
 
-                # if image_width_resolution is specified, resize the image
-                if image_width_resolution:
-                    new_width = int(image_width_resolution)
-                    rescale_factor = new_width / img.width
-                    new_height = int(img.height * rescale_factor)
-                    img = img.resize((new_width, new_height), Image.LANCZOS)
+        if self.georeferenced:
+            patch_df = pd.DataFrame(patch_df)  # convert back to pd.DataFrame
+            patch_df.drop(columns=["geometry", "crs"], inplace=True)
+        patch_df["pixel_geometry"] = patch_df["pixel_bounds"].apply(lambda x: box(*x))
+        patch_df = gpd.GeoDataFrame(patch_df, geometry="pixel_geometry")
 
-                fig = plt.figure(figsize=figsize)
-                plt.axis("off")
+        if column_to_plot:  # plot column values
+            patch_df[patch_df["parent_id"] == parent_id].plot(
+                column=column_to_plot,
+                ax=ax,
+                legend=True,
+                categorical=categorical,
+                cmap=cmap,
+                vmin=vmin,
+                vmax=vmax,
+                alpha=alpha,
+                **style_kwargs,
+            )
+        else:  # plot patches (i.e. bounding boxes)
+            patch_df[patch_df["parent_id"] == parent_id].boundary.plot(
+                ax=ax, alpha=alpha, **style_kwargs
+            )
 
-                # check if grayscale
-                if len(img.getbands()) == 1:
-                    plt.imshow(img, cmap="gray", vmin=0, vmax=255, zorder=1)
-                else:
-                    plt.imshow(img, zorder=1)
-
-                if column_to_plot:
-                    print(
-                        "[WARNING] Values are only plotted on patches. If you'd like to plot values on all patches of a parent image, use ``show_parent`` instead."
-                    )
-
-                if save_kml_dir:
-                    if "coordinates" not in self.parents[image_id].keys():
-                        print(
-                            f"[WARNING] 'coordinates' could not be found in {image_id} so no KML file can be created/saved."  # noqa
-                        )
-                        continue
-                    else:
-                        os.makedirs(save_kml_dir, exist_ok=True)
-                        kml_out_path = os.path.join(save_kml_dir, image_id)
-
-                        plt.savefig(
-                            kml_out_path,
-                            bbox_inches="tight",
-                            pad_inches=0,
-                            dpi=kml_dpi_image,
-                        )
-
-                        self._create_kml(
-                            kml_out_path=kml_out_path,
-                            column_to_plot=column_to_plot,
-                            coords=self.parents[image_id]["coordinates"],
-                            counter=-1,
-                        )
-
-                plt.title(image_id)
-                figures.append(fig)
-
-            return figures
-
-        elif tree_level == "patch":
-            # Collect parents information
-            parent_images = {}
-            for image_id in image_ids:
-                parent_id = self.patches[image_id].get("parent_id", None)
-
-                if parent_id is None:
-                    print(f"[WARNING] {image_id} has no parent. Skipping.")
-                    continue
-
-                if parent_id not in parent_images.keys():
-                    parent_images[parent_id] = {
-                        "image_path": self.parents[parent_id]["image_path"],
-                        "patches": [image_id],
-                    }
-                else:
-                    parent_images[parent_id]["patches"].append(image_id)
-
-            # plot each parent
-            for parent_id in tqdm(parent_images.keys()):
-                fig, ax = plt.subplots(figsize=figsize)
-                ax.axis("off")
-
-                # initialize values_array - will be filled with values of 'value'
-                parent_height, parent_width, _ = self.parents[parent_id]["shape"]
-                values_array = np.full((parent_height, parent_width), np.nan)
-
-                for patch_id in self.parents[parent_id]["patches"]:
-                    patch_dic = self.patches[patch_id]
-                    pixel_bounds = patch_dic[
-                        "pixel_bounds"
-                    ]  # min_x, min_y, max_x, max_y
-
-                    # Set the values for each patch
-                    if column_to_plot:
-                        patch_value = patch_dic.get(column_to_plot, None)
-
-                        # assign values to values_array
-                        values_array[
-                            pixel_bounds[1] : pixel_bounds[3],
-                            pixel_bounds[0] : pixel_bounds[2],
-                        ] = patch_value
-
-                    if patch_border:
-                        patch_xy = (pixel_bounds[0], pixel_bounds[1])
-                        patch_width = pixel_bounds[2] - pixel_bounds[0]  # max_x - min_x
-                        patch_height = (
-                            pixel_bounds[3] - pixel_bounds[1]
-                        )  # max_y - min_y
-                        rect = patches.Rectangle(
-                            patch_xy,
-                            patch_width,
-                            patch_height,
-                            fc="none",
-                            ec=border_color,
-                            lw=1,
-                            zorder=20,
-                        )
-                        ax.add_patch(rect)
-
-                if column_to_plot:
-                    vmin = vmin if vmin else np.min(values_array)
-                    vmax = vmax if vmax else np.max(values_array)
-
-                    # set discrete colorbar
-                    cmap = plt.get_cmap(cmap, discrete_cmap)
-
-                    values_plot = ax.imshow(
-                        values_array,
-                        zorder=10,
-                        cmap=cmap,
-                        vmin=vmin,
-                        vmax=vmax,
-                        alpha=alpha,
-                    )
-
-                    fig.colorbar(values_plot, shrink=0.8)
-
-                if plot_parent:
-                    parent_path = parent_images[parent_id]["image_path"]
-                    parent_image = Image.open(parent_path)
-
-                    # check if grayscale
-                    if len(parent_image.getbands()) == 1:
-                        ax.imshow(parent_image, cmap="gray", vmin=0, vmax=255)
-                    else:
-                        ax.imshow(parent_image)
-
-                if save_kml_dir:
-                    os.makedirs(save_kml_dir, exist_ok=True)
-                    kml_out_path = os.path.join(save_kml_dir, parent_id)
-                    plt.savefig(
-                        f"{kml_out_path}",
-                        bbox_inches="tight",
-                        pad_inches=0,
-                        dpi=kml_dpi_image,
-                    )
-                    self._create_kml(
-                        kml_out_path=kml_out_path,
-                        column_to_plot=column_to_plot,
-                        coords=self.parents[image_id]["coordinates"],
-                        counter=-1,
-                    )
-
-                ax.set_title(parent_id)
-                figures.append(fig)
-
-                if column_to_plot and plot_histogram:
-                    self._hist_values_array(column_to_plot, values_array)
-
-            return figures
-
-    def _create_kml(
-        self,
-        kml_out_path: str,
-        column_to_plot: str,
-        coords: list | tuple,
-        counter: int | None = -1,
-    ) -> None:
-        """Create a KML file.
-
-        ..
-            Private method.
-
-        Parameters
-        ----------
-        path2kml : str
-            Directory to save KML file.
-        value : _type_
-            Column to plot on underlying image.
-        coords : list or tuple
-            Coordinates of the bounding box.
-        counter : int, optional
-            Counter to be used for HREF, by default `-1`.
-        """
-
-        try:
-            import simplekml
-        except ImportError:
-            raise ImportError("[ERROR] simplekml is needed to create KML outputs.")
-
-        (lon_min, lat_min, lon_max, lat_max) = coords  # (xmin, ymin, xmax, ymax)
-
-        # -----> create KML
-        kml = simplekml.Kml()
-        ground = kml.newgroundoverlay(name=str(counter))
-        if counter == -1:
-            ground.icon.href = f"./{column_to_plot}"
-        else:
-            ground.icon.href = f"./{column_to_plot}_{counter}"
-
-        ground.latlonbox.north = lat_max
-        ground.latlonbox.south = lat_min
-        ground.latlonbox.east = lon_max
-        ground.latlonbox.west = lon_min
-        # ground.latlonbox.rotation = -14
-
-        kml.save(f"{kml_out_path}.kml")
-
-    def _hist_values_array(
-        self,
-        column_to_plot,
-        values_array,
-    ):
-        plt.figure(figsize=(7, 5))
-        plt.hist(
-            values_array.flatten(),
-            color="k",
-            bins=20,
-        )
-
-        plt.xlabel(column_to_plot, size=20)
-        plt.ylabel("Freq.", size=20)
-        plt.xticks(size=18)
-        plt.yticks(size=18)
-        plt.grid()
-        plt.show()
+        fig.show()
 
     def load_patches(
         self,
@@ -2008,8 +1937,6 @@ See https://pillow.readthedocs.io/en/stable/handbook/concepts.html#modes for mor
         -------
         None
         """
-        self.georeferenced = False  # reset georeferenced status
-
         patch_files = self._resolve_file_path(patch_paths, patch_file_ext)
 
         if clear_images:

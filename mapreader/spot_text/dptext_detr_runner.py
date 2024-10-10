@@ -35,7 +35,7 @@ class DPTextDETRRunner(Runner):
     def __init__(
         self,
         patch_df: pd.DataFrame | gpd.GeoDataFrame | str | pathlib.Path,
-        parent_df: pd.DataFrame | gpd.GeoDataFrame | str | pathlib.Path = None,
+        parent_df: pd.DataFrame | gpd.GeoDataFrame | str | pathlib.Path | None = None,
         cfg_file: str
         | pathlib.Path = "./DPText-DETR/configs/DPText_DETR/ArT/R_50_poly.yaml",
         weights_file: str | pathlib.Path = "./art_final.pth",

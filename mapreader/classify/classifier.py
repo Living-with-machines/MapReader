@@ -7,7 +7,7 @@ import random
 import socket
 import sys
 import time
-from collections.abc import Hashable, Iterable
+from collections.abc import Iterable
 from datetime import datetime
 from typing import Any
 
@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn as nn
-import torchvision
+from matplotlib.ticker import MaxNLocator
 from sklearn.metrics import precision_recall_fscore_support, roc_auc_score
 from torch import optim
 from torch.utils.data import DataLoader, Sampler
@@ -74,7 +74,7 @@ class ClassifierContainer:
         A dictionary to store sizes of datasets for the model.
     model : torch.nn.Module
         The model.
-    input_size : None or tuple of int
+    input_size : Tuple of int
         The size of the input to the model.
     is_inception : bool
         A flag indicating if the model is an Inception model.
@@ -100,18 +100,18 @@ class ClassifierContainer:
 
     def __init__(
         self,
-        model: str | nn.Module | None,
-        labels_map: dict[int, str] | None,
+        model: str | nn.Module | None = None,
+        labels_map: dict[int, str] | None = None,
         dataloaders: dict[str, DataLoader] | None = None,
-        device: str | None = "default",
-        input_size: int | None = (224, 224),
+        device: str = "default",
+        input_size: int = (224, 224),
         is_inception: bool = False,
         load_path: str | None = None,
-        force_device: bool | None = False,
+        force_device: bool = False,
         **kwargs,
     ):
         # set up device
-        if device in ["default", None]:
+        if device == "default":
             self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         else:
             self.device = device
@@ -120,12 +120,10 @@ class ClassifierContainer:
         # check if loading an pre-existing object
         if load_path:
             if model:
-                raise ValueError(
-                    "[ERROR] ``model`` and ``load_path`` cannot be used together - please set one to ``None``."
-                )
+                print("[WARNING] Ignoring ``model`` as ``load_path`` is specified.")
             if labels_map:
-                raise ValueError(
-                    "[ERROR] ``labels_map`` and ``load_path`` cannot be used together - please set one to ``None``."
+                print(
+                    "[WARNING] Ignoring ``labels_map`` as ``load_path`` is specified."
                 )
 
             # load object
@@ -139,7 +137,7 @@ class ClassifierContainer:
         else:
             if model is None or labels_map is None:
                 raise ValueError(
-                    "[ERROR] Unless passing ``load_path``, ``model`` and ``labels_map`` must be defined."
+                    "[ERROR] ``model`` and ``labels_map`` must be defined."
                 )
 
             self.labels_map = labels_map
@@ -177,1193 +175,6 @@ class ClassifierContainer:
 
         for set_name, dataloader in self.dataloaders.items():
             print(f'[INFO] Loaded "{set_name}" with {len(dataloader.dataset)} items.')
-
-    def generate_layerwise_lrs(
-        self,
-        min_lr: float,
-        max_lr: float,
-        spacing: str | None = "linspace",
-    ) -> list[dict]:
-        """
-        Calculates layer-wise learning rates for a given set of model
-        parameters.
-
-        Parameters
-        ----------
-        min_lr : float
-            The minimum learning rate to be used.
-        max_lr : float
-            The maximum learning rate to be used.
-        spacing : str, optional
-            The type of sequence to use for spacing the specified interval
-            learning rates. Can be either ``"linspace"`` or ``"geomspace"``,
-            where `"linspace"` uses evenly spaced learning rates over a
-            specified interval and `"geomspace"` uses learning rates spaced
-            evenly on a log scale (a geometric progression). By default ``"linspace"``.
-
-        Returns
-        -------
-        list of dicts
-            A list of dictionaries containing the parameters and learning
-            rates for each layer.
-        """
-
-        if spacing.lower() not in ["linspace", "geomspace"]:
-            raise NotImplementedError(
-                '[ERROR] ``spacing`` must be one of "linspace" or "geomspace"'
-            )
-
-        if spacing.lower() == "linspace":
-            lrs = np.linspace(min_lr, max_lr, len(list(self.model.named_parameters())))
-        elif spacing.lower() in ["log", "geomspace"]:
-            lrs = np.geomspace(min_lr, max_lr, len(list(self.model.named_parameters())))
-        params2optimize = [
-            {"params": params, "learning rate": lr}
-            for (_, params), lr in zip(self.model.named_parameters(), lrs)
-        ]
-
-        return params2optimize
-
-    def initialize_optimizer(
-        self,
-        optim_type: str | None = "adam",
-        params2optimize: str | Iterable | None = "default",
-        optim_param_dict: dict | None = None,
-        add_optim: bool | None = True,
-    ) -> torch.optim.Optimizer | None:
-        """
-        Initializes an optimizer for the model and adds it to the classifier
-        object.
-
-        Parameters
-        ----------
-        optim_type : str, optional
-            The type of optimizer to use. Can be set to ``"adam"`` (default),
-            ``"adamw"``, or ``"sgd"``.
-        params2optimize : str or iterable, optional
-            The parameters to optimize. If set to ``"default"``, all model
-            parameters that require gradients will be optimized.
-            Default is ``"default"``.
-        optim_param_dict : dict, optional
-            The parameters to pass to the optimizer constructor as a
-            dictionary, by default ``{"lr": 1e-3}``.
-        add_optim : bool, optional
-            If ``True``, adds the optimizer to the classifier object, by
-            default ``True``.
-
-        Returns
-        -------
-        optimizer : torch.optim.Optimizer
-            The initialized optimizer. Only returned if ``add_optim`` is set to
-            ``False``.
-
-        Notes
-        -----
-        If ``add_optim`` is True, the optimizer will be added to object.
-
-        Note that the first argument of an optimizer is parameters to optimize,
-        e.g. ``params2optimize = model_ft.parameters()``:
-
-        - ``model_ft.parameters()``: all parameters are being optimized
-        - ``model_ft.fc.parameters()``: only parameters of final layer are being optimized
-
-        Here, we use:
-
-        .. code-block:: python
-
-            filter(lambda p: p.requires_grad, self.model.parameters())
-        """
-        if optim_param_dict is None:
-            optim_param_dict = {"lr": 0.001}
-        if params2optimize == "default":
-            params2optimize = filter(lambda p: p.requires_grad, self.model.parameters())
-
-        if optim_type.lower() in ["adam"]:
-            optimizer = optim.Adam(params2optimize, **optim_param_dict)
-        elif optim_type.lower() in ["adamw"]:
-            optimizer = optim.AdamW(params2optimize, **optim_param_dict)
-        elif optim_type.lower() in ["sgd"]:
-            optimizer = optim.SGD(params2optimize, **optim_param_dict)
-        else:
-            raise NotImplementedError(
-                '[ERROR] At present, only Adam ("adam"), AdamW ("adamw") and SGD ("sgd") are options for ``optim_type``.'
-            )
-
-        if add_optim:
-            self.add_optimizer(optimizer)
-        else:
-            return optimizer
-
-    def add_optimizer(self, optimizer: torch.optim.Optimizer) -> None:
-        """
-        Add an optimizer to the classifier object.
-
-        Parameters
-        ----------
-        optimizer : torch.optim.Optimizer
-            The optimizer to add to the classifier object.
-
-        Returns
-        -------
-        None
-        """
-        self.optimizer = optimizer
-
-    def initialize_scheduler(
-        self,
-        scheduler_type: str | None = "steplr",
-        scheduler_param_dict: dict | None = None,
-        add_scheduler: bool | None = True,
-    ) -> torch.optim.lr_scheduler._LRScheduler | None:
-        """
-        Initializes a learning rate scheduler for the optimizer and adds it to
-        the classifier object.
-
-        Parameters
-        ----------
-        scheduler_type : str, optional
-            The type of learning rate scheduler to use. Can be either
-            ``"steplr"`` (default) or ``"onecyclelr"``.
-        scheduler_param_dict : dict, optional
-            The parameters to pass to the scheduler constructor, by default
-            ``{"step_size": 10, "gamma": 0.1}``.
-        add_scheduler : bool, optional
-            If ``True``, adds the scheduler to the classifier object, by
-            default ``True``.
-
-        Raises
-        ------
-        ValueError
-            If the specified ``scheduler_type`` is not implemented.
-
-        Returns
-        -------
-        scheduler : torch.optim.lr_scheduler._LRScheduler
-            The initialized learning rate scheduler. Only returned if
-            ``add_scheduler`` is set to False.
-        """
-        if scheduler_param_dict is None:
-            scheduler_param_dict = {"step_size": 10, "gamma": 0.1}
-        if self.optimizer is None:
-            raise ValueError(
-                "[ERROR] Optimizer is not yet defined. \n\n\
-Use ``initialize_optimizer`` or ``add_optimizer`` to define one."  # noqa
-            )
-
-        if scheduler_type.lower() == "steplr":
-            scheduler = optim.lr_scheduler.StepLR(
-                self.optimizer, **scheduler_param_dict
-            )
-        elif scheduler_type.lower() == "onecyclelr":
-            scheduler = optim.lr_scheduler.OneCycleLR(
-                self.optimizer,
-                **scheduler_param_dict,  # TODO: RW - Cannot use this with default scheduler_param_dict - need to update
-            )
-        else:
-            raise NotImplementedError(
-                f'[ERROR] At present, ``scheduler_type`` can only be "steplr" or "onecyclelr". Not {scheduler_type}.'  # noqa
-            )
-
-        if add_scheduler:
-            self.add_scheduler(scheduler)
-        else:
-            return scheduler
-
-    def add_scheduler(self, scheduler: torch.optim.lr_scheduler._LRScheduler) -> None:
-        """
-        Add a scheduler to the classifier object.
-
-        Parameters
-        ----------
-        scheduler : torch.optim.lr_scheduler._LRScheduler
-            The scheduler to add to the classifier object.
-
-        Raises
-        ------
-        ValueError
-            If no optimizer has been set. Use ``initialize_optimizer`` or
-            ``add_optimizer`` to set an optimizer first.
-
-        Returns
-        -------
-        None
-        """
-        if self.optimizer is None:
-            raise ValueError(
-                "[ERROR] Optimizer is needed. Use initialize_optimizer or add_optimizer"  # noqa
-            )
-
-        self.scheduler = scheduler
-
-    def add_loss_fn(
-        self, loss_fn: str | nn.modules.loss._Loss | None = "cross entropy"
-    ) -> None:
-        """
-        Add a loss function to the classifier object.
-
-        Parameters
-        ----------
-        loss_fn : str or torch.nn.modules.loss._Loss
-            The loss function to add to the classifier object.
-            Accepted string values are "cross entropy" or "ce" (cross-entropy), "bce" (binary cross-entropy) and "mse" (mean squared error).
-
-        Returns
-        -------
-        None
-            The function only modifies the ``loss_fn`` attribute of the
-            classifier and does not return anything.
-        """
-        if isinstance(loss_fn, str):
-            if loss_fn in ["cross entropy", "ce", "cross_entropy", "cross-entropy"]:
-                loss_fn = nn.CrossEntropyLoss()
-            elif loss_fn in [
-                "bce",
-                "binary_cross_entropy",
-                "binary cross entropy",
-                "binary cross-entropy",
-            ]:
-                loss_fn = nn.BCELoss()
-            elif loss_fn in [
-                "mse",
-                "mean_square_error",
-                "mean_squared_error",
-                "mean squared error",
-            ]:
-                loss_fn = nn.MSELoss()
-            else:
-                raise NotImplementedError(
-                    '[ERROR] At present, if passing ``loss_fn`` as a string, the loss function can only be "cross entropy" or "ce" (cross-entropy), "bce" (binary cross-entropy) or "mse" (mean squared error).'
-                )
-
-            print(f'[INFO] Using "{loss_fn}" as loss function.')
-
-        elif not isinstance(loss_fn, nn.modules.loss._Loss):
-            raise ValueError(
-                '[ERROR] Please pass ``loss_fn`` as a string ("cross entropy", "bce" or "mse") or torch.nn loss function (see https://pytorch.org/docs/stable/nn.html).'
-            )
-
-        self.loss_fn = loss_fn
-
-    def model_summary(
-        self,
-        input_size: tuple | list | None = None,
-        trainable_col: bool | None = False,
-        **kwargs,
-    ) -> None:
-        """
-        Print a summary of the model.
-
-        Parameters
-        ----------
-        input_size : tuple or list, optional
-            The size of the input data.
-            If None, input size is taken from "train" dataloader (``self.dataloaders["train"]``).
-        trainable_col : bool, optional
-            If ``True``, adds a column showing which parameters are trainable.
-            Defaults to ``False``.
-        **kwargs : Dict
-            Keyword arguments to pass to ``torchinfo.summary()`` (see https://github.com/TylerYep/torchinfo).
-
-        Notes
-        -----
-        Other ways to check params:
-
-        .. code-block:: python
-
-            sum(p.numel() for p in myclassifier.model.parameters())
-
-        .. code-block:: python
-
-            sum(p.numel() for p in myclassifier.model.parameters()
-                if p.requires_grad)
-
-        And:
-
-        .. code-block:: python
-
-            for name, param in self.model.named_parameters():
-                n = name.split(".")[0].split("_")[0]
-                print(name, param.requires_grad)
-        """
-        if not input_size:
-            if "train" in self.dataloaders.keys():
-                batch_size = self.dataloaders["train"].batch_size
-                channels = len(self.dataloaders["train"].dataset.image_mode)
-                input_size = (batch_size, channels, *self.input_size)
-            else:
-                raise ValueError("[ERROR] Please pass an input size.")
-
-        if trainable_col:
-            col_names = ["num_params", "output_size", "trainable"]
-        else:
-            col_names = ["output_size", "output_size", "num_params"]
-
-        model_summary = summary(
-            self.model, input_size=input_size, col_names=col_names, **kwargs
-        )
-        print(model_summary)
-
-    def freeze_layers(self, layers_to_freeze: list[str] | None = None) -> None:
-        """
-        Freezes the specified layers in the neural network by setting
-        ``requires_grad`` attribute to False for their parameters.
-
-        Parameters
-        ----------
-        layers_to_freeze : list of str, optional
-            List of names of the layers to freeze. If a layer name ends with
-            an asterisk (``"*"``), then all parameters whose name contains the
-            layer name (excluding the asterisk) are frozen. Otherwise,
-            only the parameters with an exact match to the layer name
-            are frozen. By default, ``[]``.
-
-        Returns
-        -------
-        None
-            The function only modifies the ``requires_grad`` attribute of the
-            specified parameters and does not return anything.
-
-        Notes
-        -----
-        Wildcards are accepted in the ``layers_to_freeze`` parameter.
-        """
-
-        if layers_to_freeze is None:
-            layers_to_freeze = []
-        for layer in layers_to_freeze:
-            for name, param in self.model.named_parameters():
-                if (layer[-1] == "*") and (layer.replace("*", "") in name):
-                    param.requires_grad = False
-                elif (layer[-1] != "*") and (layer == name):
-                    param.requires_grad = False
-
-    def unfreeze_layers(self, layers_to_unfreeze: list[str] | None = None):
-        """
-        Unfreezes the specified layers in the neural network by setting
-        ``requires_grad`` attribute to True for their parameters.
-
-        Parameters
-        ----------
-        layers_to_unfreeze : list of str, optional
-            List of names of the layers to unfreeze. If a layer name ends with
-            an asterisk (``"*"``), then all parameters whose name contains the
-            layer name (excluding the asterisk) are unfrozen. Otherwise,
-            only the parameters with an exact match to the layer name
-            are unfrozen. By default, ``[]``.
-
-        Returns
-        -------
-        None
-            The function only modifies the ``requires_grad`` attribute of the
-            specified parameters and does not return anything.
-
-        Notes
-        -----
-        Wildcards are accepted in the ``layers_to_unfreeze`` parameter.
-        """
-
-        if layers_to_unfreeze is None:
-            layers_to_unfreeze = []
-        for layer in layers_to_unfreeze:
-            for name, param in self.model.named_parameters():
-                if (layer[-1] == "*") and (layer.replace("*", "") in name):
-                    param.requires_grad = True
-                elif (layer[-1] != "*") and (layer == name):
-                    param.requires_grad = True
-
-    def only_keep_layers(self, only_keep_layers_list: list[str] | None = None) -> None:
-        """
-        Only keep the specified layers (``only_keep_layers_list``) for
-        gradient computation during the backpropagation.
-
-        Parameters
-        ----------
-        only_keep_layers_list : list, optional
-            List of layer names to keep. All other layers will have their
-            gradient computation turned off. Default is ``[]``.
-
-        Returns
-        -------
-        None
-            The function only modifies the ``requires_grad`` attribute of the
-            specified parameters and does not return anything.
-        """
-        if only_keep_layers_list is None:
-            only_keep_layers_list = []
-        for name, param in self.model.named_parameters():
-            if name in only_keep_layers_list:
-                param.requires_grad = True
-            else:
-                param.requires_grad = False
-
-    def inference(
-        self,
-        set_name: str | None = "infer",
-        verbose: bool | None = False,
-        print_info_batch_freq: int | None = 5,
-    ):
-        """
-        Run inference on a specified dataset (``set_name``).
-
-        Parameters
-        ----------
-        set_name : str, optional
-            The name of the dataset to run inference on, by default
-            ``"infer"``.
-        verbose : bool, optional
-            Whether to print verbose outputs, by default False.
-        print_info_batch_freq : int, optional
-            The frequency of printouts, by default ``5``.
-
-        Returns
-        -------
-        None
-
-        Notes
-        -----
-        This method calls the
-        :meth:`~.train.classifier.classifier.train` method with the
-        ``num_epochs`` set to ``1`` and all the other parameters specified in
-        the function arguments.
-        """
-        self.train(
-            phases=[set_name],
-            num_epochs=1,
-            save_model_dir=None,
-            verbose=verbose,
-            tensorboard_path=None,
-            tmp_file_save_freq=2,
-            remove_after_load=False,
-            print_info_batch_freq=print_info_batch_freq,
-        )
-
-    def train_component_summary(self) -> None:
-        """
-        Print a summary of the optimizer, loss function, and trainable model
-        components.
-
-        Returns:
-        --------
-        None
-        """
-        divider = 20 * "="
-        print(divider)
-        print("* Optimizer:")
-        print(str(self.optimizer))
-        print(divider)
-        print("* Loss function:")
-        print(str(self.loss_fn))
-        print(divider)
-        print("* Model:")
-        self.model_summary(trainable_col=True)
-
-    def train(
-        self,
-        phases: list[str] | None = None,
-        num_epochs: int | None = 25,
-        save_model_dir: str | None | None = "models",
-        verbose: bool = False,
-        tensorboard_path: str | None | None = None,
-        tmp_file_save_freq: int | None | None = 2,
-        remove_after_load: bool = True,
-        print_info_batch_freq: int | None | None = 5,
-    ) -> None:
-        """
-        Train the model on the specified phases for a given number of epochs.
-
-        Wrapper function for
-        :meth:`~.train.classifier.classifier.train_core` method to
-        capture exceptions (``KeyboardInterrupt`` is the only supported
-        exception currently).
-
-        Parameters
-        ----------
-        phases : list of str, optional
-            The phases to run through during each training iteration. Default is
-            ``["train", "val"]``.
-        num_epochs : int, optional
-            The number of epochs to train the model for. Default is ``25``.
-        save_model_dir : str or None, optional
-            The directory to save the model in. Default is ``"models"``. If
-            set to ``None``, the model is not saved.
-        verbose : int, optional
-            Whether to print verbose outputs, by default ``False``.
-        tensorboard_path : str or None, optional
-            The path to the directory to save TensorBoard logs in. If set to
-            ``None``, no TensorBoard logs are saved. Default is ``None``.
-        tmp_file_save_freq : int, optional
-            The frequency (in epochs) to save a temporary file of the model.
-            Default is ``2``. If set to ``0`` or ``None``, no temporary file
-            is saved.
-        remove_after_load : bool, optional
-            Whether to remove the temporary file after loading it. Default is
-            ``True``.
-        print_info_batch_freq : int, optional
-            The frequency (in batches) to print training information. Default
-            is ``5``. If set to ``0`` or ``None``, no training information is
-            printed.
-
-        Returns
-        -------
-        None
-            The function saves the model to the ``save_model_dir`` directory,
-            and optionally to a temporary file. If interrupted with a
-            ``KeyboardInterrupt``, the function tries to load the temporary
-            file. If no temporary file is found, it continues without loading.
-
-        Notes
-        -----
-        Refer to the documentation of
-        :meth:`~.train.classifier.classifier.train_core` for more
-        information.
-        """
-
-        if phases is None:
-            phases = ["train", "val"]
-        try:
-            self.train_core(
-                phases,
-                num_epochs,
-                save_model_dir,
-                verbose,
-                tensorboard_path,
-                tmp_file_save_freq,
-                print_info_batch_freq=print_info_batch_freq,
-            )
-        except KeyboardInterrupt:
-            print("[INFO] Exiting...")
-            if os.path.isfile(self.tmp_save_filename):
-                print(f'[INFO] Loading "{self.tmp_save_filename}" as model.')
-                self.load(self.tmp_save_filename, remove_after_load=remove_after_load)
-            else:
-                print("[INFO] No checkpoint file found - model has not been updated.")
-
-    def train_core(
-        self,
-        phases: list[str] | None = None,
-        num_epochs: int | None = 25,
-        save_model_dir: str | None | None = "models",
-        verbose: bool = False,
-        tensorboard_path: str | None | None = None,
-        tmp_file_save_freq: int | None | None = 2,
-        print_info_batch_freq: int | None | None = 5,
-    ) -> None:
-        """
-        Trains/fine-tunes a classifier for the specified number of epochs on
-        the given phases using the specified hyperparameters.
-
-        Parameters
-        ----------
-        phases : list of str, optional
-            The phases to run through during each training iteration. Default is
-            ``["train", "val"]``.
-        num_epochs : int, optional
-            The number of epochs to train the model for. Default is ``25``.
-        save_model_dir : str or None, optional
-            The directory to save the model in. Default is ``"models"``. If
-            set to ``None``, the model is not saved.
-        verbose : bool, optional
-            Whether to print verbose outputs, by default ``False``.
-        tensorboard_path : str or None, optional
-            The path to the directory to save TensorBoard logs in. If set to
-            ``None``, no TensorBoard logs are saved. Default is ``None``.
-        tmp_file_save_freq : int, optional
-            The frequency (in epochs) to save a temporary file of the model.
-            Default is ``2``. If set to ``0`` or ``None``, no temporary file
-            is saved.
-        print_info_batch_freq : int, optional
-            The frequency (in batches) to print training information. Default
-            is ``5``. If set to ``0`` or ``None``, no training information is
-            printed.
-
-        Raises
-        ------
-        ValueError
-            If the loss function is not set. Use the
-            :meth:`~.classify.classifier.ClassifierContainer.add_loss_fn`
-            method to set the loss function.
-
-            If the optimizer is not set and the phase is "train". Use the
-            :meth:`~.classify.classifier.ClassifierContainer.initialize_optimizer`
-            or :meth:`~.classify.classifier.ClassifierContainer.add_optimizer`
-            method to set the optimizer.
-
-        KeyError
-            If the specified phase cannot be found in the keys of the object's
-            :attr:`~.classify.classifier.ClassifierContainer.dataloaders`
-            dictionary property.
-
-        Returns
-        -------
-        None
-        """
-
-        if phases is None:
-            phases = ["train", "val"]
-        print(f"[INFO] Each step will pass: {phases}.")
-
-        for phase in phases:
-            if phase not in self.dataloaders.keys():
-                raise KeyError(
-                    f'[ERROR] "{phase}" dataloader cannot be found in dataloaders.\n\
-    Valid options for ``phases`` argument are: {self.dataloaders.keys()}'  # noqa
-                )
-
-        if verbose:
-            self.train_component_summary()
-
-        since = time.time()
-
-        # initialize variables
-        train_phase_names = ["train", "training"]
-        valid_phase_names = ["val", "validation", "eval", "evaluation"]
-        best_model_wts = copy.deepcopy(self.model.state_dict())
-        self.pred_conf = []
-        self.pred_label_indices = []
-        self.orig_label_indices = []
-        if save_model_dir is not None:
-            save_model_dir = os.path.abspath(save_model_dir)
-
-        # Check if SummaryWriter (for tensorboard) can be imported
-        tboard_writer = None
-        if tensorboard_path is not None:
-            try:
-                from torch.utils.tensorboard import SummaryWriter
-
-                tboard_writer = SummaryWriter(tensorboard_path)
-            except ImportError:
-                print(
-                    "[WARNING] Could not import ``SummaryWriter`` from torch.utils.tensorboard"  # noqa
-                )
-                print("[WARNING] Continuing without tensorboard.")
-                tensorboard_path = None
-
-        start_epoch = self.last_epoch + 1
-        end_epoch = self.last_epoch + num_epochs
-
-        # --- Main train loop
-        for epoch in range(start_epoch, end_epoch + 1):
-            # --- loop, phases
-            for phase in phases:
-                if phase.lower() in train_phase_names:
-                    self.model.train()
-                else:
-                    self.model.eval()
-
-                # initialize vars with one epoch lifetime
-                running_loss = 0.0
-                running_pred_conf = []
-                running_pred_label_indices = []
-                running_orig_label_indices = []
-
-                # TQDM
-                # batch_loop = tqdm(iter(self.dataloaders[phase]), total=len(self.dataloaders[phase]), leave=False) # noqa
-                # if phase.lower() in train_phase_names+valid_phase_names:
-                #     batch_loop.set_description(f"Epoch {epoch}/{end_epoch}")
-
-                phase_batch_size = self.dataloaders[phase].batch_size
-                total_inp_counts = len(self.dataloaders[phase].dataset)
-
-                # --- loop, batches
-                for batch_idx, (inputs, _labels, label_indices) in enumerate(
-                    self.dataloaders[phase]
-                ):
-                    inputs = tuple(input.to(self.device) for input in inputs)
-                    label_indices = label_indices.to(self.device)
-
-                    if self.optimizer is None:
-                        if phase.lower() in train_phase_names:
-                            raise ValueError(
-                                f"[ERROR] An optimizer should be defined for {phase} phase.\n\
-Use ``initialize_optimizer`` or ``add_optimizer`` to add one."  # noqa
-                            )
-                    else:
-                        self.optimizer.zero_grad()
-
-                    if phase.lower() in train_phase_names + valid_phase_names:
-                        # forward, track history if only in train
-                        with torch.set_grad_enabled(phase.lower() in train_phase_names):
-                            # Get model outputs and calculate loss
-                            # Special case for inception because in training,
-                            # it has an auxiliary output.
-                            #     In train mode we calculate the loss by
-                            #     summing the final output and the auxiliary
-                            #     output but in testing we only consider the
-                            #     final output.
-                            if self.loss_fn is None:
-                                raise ValueError(
-                                    "[ERROR] Loss function is not yet defined.\n\n\
-Use ``add_loss_fn`` to define one."
-                                )
-
-                            if self.is_inception and (
-                                phase.lower() in train_phase_names
-                            ):
-                                outputs, aux_outputs = self.model(*inputs)
-
-                                if not isinstance(outputs, torch.Tensor):
-                                    outputs = self._get_logits(outputs)
-                                if not isinstance(aux_outputs, torch.Tensor):
-                                    aux_outputs = self._get_logits(aux_outputs)
-
-                                loss1 = self.loss_fn(outputs, label_indices)
-                                loss2 = self.loss_fn(aux_outputs, label_indices)
-                                # https://discuss.pytorch.org/t/how-to-optimize-inception-model-with-auxiliary-classifiers/7958
-                                loss = loss1 + 0.4 * loss2
-
-                            else:
-                                outputs = self.model(*inputs)
-
-                                if not isinstance(outputs, torch.Tensor):
-                                    outputs = self._get_logits(outputs)
-
-                                loss = self.loss_fn(outputs, label_indices)
-
-                            _, pred_label_indices = torch.max(outputs, dim=1)
-
-                            # backward + optimize only if in training phase
-                            if phase.lower() in train_phase_names:
-                                loss.backward()
-                                self.optimizer.step()
-
-                        # XXX (why multiply?)
-                        running_loss += loss.item() * inputs[0].size(0)
-
-                        # TQDM
-                        # batch_loop.set_postfix(loss=loss.data)
-                        # batch_loop.refresh()
-                    else:
-                        outputs = self.model(*inputs)
-
-                        if not isinstance(outputs, torch.Tensor):
-                            outputs = self._get_logits(outputs)
-
-                        _, pred_label_indices = torch.max(outputs, dim=1)
-
-                    running_pred_conf.extend(
-                        torch.nn.functional.softmax(outputs, dim=1).cpu().tolist()
-                    )
-                    running_pred_label_indices.extend(pred_label_indices.cpu().tolist())
-                    running_orig_label_indices.extend(label_indices.cpu().tolist())
-
-                    if batch_idx % print_info_batch_freq == 0:
-                        curr_inp_counts = min(
-                            total_inp_counts,
-                            (batch_idx + 1) * phase_batch_size,
-                        )
-                        progress_perc = curr_inp_counts / total_inp_counts * 100.0
-                        tmp_str = f"{curr_inp_counts}/{total_inp_counts} ({progress_perc:5.1f}% )"  # noqa
-
-                        epoch_msg = f"{phase: <8} -- {epoch}/{end_epoch} -- "
-                        epoch_msg += f"{tmp_str: >20} -- "
-
-                        if phase.lower() in valid_phase_names:
-                            epoch_msg += f"Loss: {loss.data:.3f}"
-                            self.cprint("[INFO]", "dred", epoch_msg)
-                        elif phase.lower() in train_phase_names:
-                            epoch_msg += f"Loss: {loss.data:.3f}"
-                            self.cprint("[INFO]", "dgreen", epoch_msg)
-                        else:
-                            self.cprint("[INFO]", "dgreen", epoch_msg)
-                    # --- END: one batch
-
-                # scheduler
-                if phase.lower() in train_phase_names and (self.scheduler is not None):
-                    self.scheduler.step()
-
-                if phase.lower() in train_phase_names + valid_phase_names:
-                    # --- collect statistics
-                    epoch_loss = running_loss / len(self.dataloaders[phase].dataset)
-                    self._add_metrics(f"epoch_loss_{phase}", epoch_loss)
-
-                    if tboard_writer is not None:
-                        tboard_writer.add_scalar(
-                            f"loss/{phase}",
-                            self.metrics[f"epoch_loss_{phase}"][-1],
-                            epoch,
-                        )
-
-                    # other metrics (precision/recall/F1)
-                    self.calculate_add_metrics(
-                        running_orig_label_indices,
-                        running_pred_label_indices,
-                        running_pred_conf,
-                        phase,
-                        epoch,
-                        tboard_writer,
-                    )
-
-                    epoch_msg = f"{phase: <8} -- {epoch}/{end_epoch} -- "
-                    epoch_msg = self._gen_epoch_msg(phase, epoch_msg)
-
-                    if phase.lower() in valid_phase_names:
-                        self.cprint("[INFO]", "dred", epoch_msg + "\n")
-                    else:
-                        self.cprint("[INFO]", "dgreen", epoch_msg)
-
-                # labels/confidence
-                self.pred_conf.extend(running_pred_conf)
-                self.pred_label_indices.extend(running_pred_label_indices)
-                self.orig_label_indices.extend(running_orig_label_indices)
-
-                # Update best_loss and _epoch?
-                if phase.lower() in valid_phase_names and epoch_loss < self.best_loss:
-                    self.best_loss = epoch_loss
-                    self.best_epoch = epoch
-                    best_model_wts = copy.deepcopy(self.model.state_dict())
-
-                if phase.lower() in valid_phase_names:
-                    if epoch % tmp_file_save_freq == 0:
-                        tmp_str = f'[INFO] Checkpoint file saved to "{self.tmp_save_filename}".'  # noqa
-                        print(
-                            self._print_colors["lgrey"]
-                            + tmp_str
-                            + self._print_colors["reset"]
-                        )
-                        self.last_epoch = epoch
-                        self.save(self.tmp_save_filename, force=True)
-
-        self.pred_label = [
-            self.labels_map.get(i, None) for i in self.pred_label_indices
-        ]
-        self.orig_label = [
-            self.labels_map.get(i, None) for i in self.orig_label_indices
-        ]
-
-        time_elapsed = time.time() - since
-        print(f"[INFO] Total time: {time_elapsed // 60:.0f}m {time_elapsed % 60:.0f}s")
-
-        # load best model weights
-        self.model.load_state_dict(best_model_wts)
-
-        # --- SAVE model/object
-        if phase.lower() in train_phase_names + valid_phase_names:
-            self.last_epoch = epoch
-            if save_model_dir is not None:
-                save_filename = f"checkpoint_{self.best_epoch}.pkl"
-                save_model_path = os.path.join(save_model_dir, save_filename)
-                self.save(save_model_path, force=True)
-                with open(os.path.join(save_model_dir, "info.txt"), "a+") as fio:
-                    fio.writelines(f"{save_filename},{self.best_loss:.5f}\n")
-
-                print(
-                    f"[INFO] Model at epoch {self.best_epoch} has least valid loss ({self.best_loss:.4f}) so will be saved.\n\
-[INFO] Path: {save_model_path}"
-                )
-
-    @staticmethod
-    def _get_logits(out):
-        try:
-            out = out.logits
-        except AttributeError as err:
-            raise AttributeError(err.message)
-        return out
-
-    def calculate_add_metrics(
-        self,
-        y_true,
-        y_pred,
-        y_score,
-        phase: str,
-        epoch: int | None = -1,
-        tboard_writer=None,
-    ) -> None:
-        """
-        Calculate and add metrics to the classifier's metrics dictionary.
-
-        Parameters
-        ----------
-        y_true : array-like of shape (n_samples,)
-            True binary labels or multiclass labels. Can be considered ground
-            truth or (correct) target values.
-
-        y_pred : array-like of shape (n_samples,)
-            Predicted binary labels or multiclass labels. The estimated
-            targets as returned by a classifier.
-
-        y_score : array-like of shape (n_samples, n_classes)
-            Predicted probabilities for each class. Only required when
-            ``y_pred`` is not binary.
-
-        phase : str
-            Name of the current phase, typically ``"train"`` or ``"val"``. See
-            ``train`` function.
-
-        epoch : int, optional
-            Current epoch number. Default is ``-1``.
-
-        tboard_writer : object, optional
-            TensorBoard SummaryWriter object to write the metrics. Default is
-            ``None``.
-
-        Returns
-        -------
-        None
-
-        Notes
-        -----
-        This method uses both the
-        :func:`sklearn.metrics.precision_recall_fscore_support` and
-        :func:`sklearn.metrics.roc_auc_score` functions from ``scikit-learn``
-        to calculate the metrics for each average type (``"micro"``,
-        ``"macro"`` and ``"weighted"``). The results are then added to the
-        ``metrics`` dictionary. It also writes the metrics to the TensorBoard
-        SummaryWriter, if ``tboard_writer`` is not None.
-        """
-        # convert y_score to a numpy array:
-        y_score = np.array(y_score)
-
-        for avrg in ["micro", "macro", "weighted"]:
-            prec, rcall, fscore, supp = precision_recall_fscore_support(
-                y_true, y_pred, average=avrg
-            )
-            self._add_metrics(f"epoch_prec_{avrg}_{phase}", prec * 100.0)
-            self._add_metrics(f"epoch_recall_{avrg}_{phase}", rcall * 100.0)
-            self._add_metrics(f"epoch_fscore_{avrg}_{phase}", fscore * 100.0)
-            self._add_metrics(f"epoch_supp_{avrg}_{phase}", supp)
-
-            if tboard_writer is not None:
-                tboard_writer.add_scalar(
-                    f"Precision/{phase}/{avrg}",
-                    self.metrics[f"epoch_prec_{avrg}_{phase}"][-1],
-                    epoch,
-                )
-                tboard_writer.add_scalar(
-                    f"Recall/{phase}/{avrg}",
-                    self.metrics[f"epoch_recall_{avrg}_{phase}"][-1],
-                    epoch,
-                )
-                tboard_writer.add_scalar(
-                    f"Fscore/{phase}/{avrg}",
-                    self.metrics[f"epoch_fscore_{avrg}_{phase}"][-1],
-                    epoch,
-                )
-
-            # --- compute ROC AUC
-            if y_score.shape[1] == 2:
-                # ---- binary case
-                # From scikit-learn:
-                #     The probability estimates correspond to the probability
-                #     of the class with the greater label, i.e.
-                #     estimator.classes_[1] and thus
-                #     estimator.predict_proba(X, y)[:, 1]
-                roc_auc = roc_auc_score(y_true, y_score[:, 1], average=avrg)
-            elif (y_score.shape[1] != 2) and (avrg in ["macro", "weighted"]):
-                # ---- multiclass
-                # In the multiclass case, it corresponds to an array of shape
-                # (n_samples, n_classes)
-                try:
-                    roc_auc = roc_auc_score(
-                        y_true, y_score, average=avrg, multi_class="ovr"
-                    )
-                except:
-                    continue
-            else:
-                continue
-
-            self._add_metrics(f"epoch_rocauc_{avrg}_{phase}", roc_auc * 100.0)
-
-        prfs = precision_recall_fscore_support(y_true, y_pred, average=None)
-        for i in range(len(prfs[0])):
-            self._add_metrics(f"epoch_prec_{i}_{phase}", prfs[0][i] * 100.0)
-            self._add_metrics(f"epoch_recall_{i}_{phase}", prfs[1][i] * 100.0)
-            self._add_metrics(f"epoch_fscore_{i}_{phase}", prfs[2][i] * 100.0)
-            self._add_metrics(f"epoch_supp_{i}_{phase}", prfs[3][i])
-
-            if tboard_writer is not None:
-                tboard_writer.add_scalar(
-                    f"Precision/{phase}/binary_{i}",
-                    self.metrics[f"epoch_prec_{i}_{phase}"][-1],
-                    epoch,
-                )
-                tboard_writer.add_scalar(
-                    f"Recall/{phase}/binary_{i}",
-                    self.metrics[f"epoch_recall_{i}_{phase}"][-1],
-                    epoch,
-                )
-                tboard_writer.add_scalar(
-                    f"Fscore/{phase}/binary_{i}",
-                    self.metrics[f"epoch_fscore_{i}_{phase}"][-1],
-                    epoch,
-                )
-
-    def _gen_epoch_msg(self, phase: str, epoch_msg: str) -> str:
-        """
-        Generates a log message for an epoch during training or validation.
-        The message includes information about the loss, F-score, and recall
-        for a given phase (training or validation).
-
-        Parameters
-        ----------
-        phase : str
-            The training phase, either ``"train"`` or ``"val"``.
-        epoch_msg : str
-            The message string to be modified with the epoch metrics.
-
-        Returns
-        -------
-        epoch_msg : str
-            The updated message string with the epoch metrics.
-        """
-        tmp_loss = self.metrics[f"epoch_loss_{phase}"][-1]
-        epoch_msg += f"Loss: {tmp_loss:.3f}; "
-
-        tmp_fscore = self.metrics[f"epoch_fscore_macro_{phase}"][-1]
-        epoch_msg += f"F_macro: {tmp_fscore:.2f}; "
-
-        tmp_recall = self.metrics[f"epoch_recall_macro_{phase}"][-1]
-        epoch_msg += f"R_macro: {tmp_recall:.2f}"
-
-        return epoch_msg
-
-    def _add_metrics(
-        self, k: Hashable, v: int | (float | (complex | np.number))
-    ) -> None:
-        """
-        Adds a metric value to a dictionary of metrics tracked during training.
-
-        Parameters
-        ----------
-        k : hashable
-            The key for the metric being tracked.
-        v : numeric
-            The metric value to add to the corresponding list of metric values.
-
-        Returns
-        -------
-        None
-
-        Notes
-        -----
-        If the key ``k`` does not exist in the dictionary of metrics, a new
-        key-value pair is created with ``k`` as the key and a new list
-        containing the value ``v`` as the value. If the key ``k`` already
-        exists in the dictionary of metrics, the value `v` is appended to the
-        list associated with the key ``k``.
-        """
-        if k not in self.metrics.keys():
-            self.metrics[k] = [v]
-        else:
-            self.metrics[k].append(v)
-
-    def plot_metric(
-        self,
-        y_axis: list[str],
-        y_label: str,
-        legends: list[str],
-        x_axis: str | None = "epoch",
-        x_label: str | None = "epoch",
-        colors: list[str] | None = 5 * ["k", "tab:red"],
-        styles: list[str] | None = 10 * ["-"],
-        markers: list[str] | None = 10 * ["o"],
-        figsize: tuple[int, int] | None = (10, 5),
-        plt_yrange: tuple[float, float] | None = None,
-        plt_xrange: tuple[float, float] | None = None,
-    ):
-        """
-        Plot the metrics of the classifier object.
-
-        Parameters
-        ----------
-        y_axis : list of str
-            A list of metric names to be plotted on the y-axis.
-        y_label : str
-            The label for the y-axis.
-        legends : list of str
-            The legend labels for each metric.
-        x_axis : str, optional
-            The metric to be used as the x-axis. Can be ``"epoch"`` (default)
-            or any other metric name present in the dataset.
-        x_label : str, optional
-            The label for the x-axis. Defaults to ``"epoch"``.
-        colors : list of str, optional
-            The colors to be used for the lines of each metric. It must be at
-            least the same size as ``y_axis``. Defaults to
-            ``5 * ["k", "tab:red"]``.
-        styles : list of str, optional
-            The line styles to be used for the lines of each metric. It must
-            be at least the same size as ``y_axis``. Defaults to
-            ``10 * ["-"]``.
-        markers : list of str, optional
-            The markers to be used for the lines of each metric. It must be at
-            least the same size as ``y_axis``. Defaults to ``10 * ["o"]``.
-        figsize : tuple of int, optional
-            The size of the figure in inches. Defaults to ``(10, 5)``.
-        plt_yrange : tuple of float, optional
-            The range of values for the y-axis. Defaults to ``None``.
-        plt_xrange : tuple of float, optional
-            The range of values for the x-axis. Defaults to ``None``.
-
-        Returns
-        -------
-        None
-
-        Notes
-        -----
-        This function requires the ``matplotlib`` package.
-        """
-
-        # Font sizes
-        plt_size = {
-            "xlabel": 24,
-            "ylabel": 24,
-            "xtick": 18,
-            "ytick": 18,
-            "legend": 18,
-        }
-
-        fig = plt.figure(figsize=figsize)
-        if x_axis == "epoch":
-            from matplotlib.ticker import MaxNLocator
-
-            # make x ticks integer
-            fig.gca().xaxis.set_major_locator(MaxNLocator(integer=True))
-
-        for i, one_item in enumerate(y_axis):
-            if one_item not in self.metrics.keys():
-                print(
-                    f"[WARNING] requested item: {one_item} not in keys: {self.metrics.keys}"  # noqa
-                )
-                continue
-
-            if x_axis == "epoch":
-                x_axis_plt = range(1, len(self.metrics[one_item]) + 1)
-            else:
-                x_axis_plt = self.metrics[x_axis]
-
-            plt.plot(
-                x_axis_plt,
-                self.metrics[one_item],
-                label=legends[i],
-                color=colors[i],
-                ls=styles[i],
-                marker=markers[i],
-                lw=3,
-            )
-
-        # --- labels and ticks
-        plt.xlabel(x_label, size=plt_size["xlabel"])
-        plt.ylabel(y_label, size=plt_size["ylabel"])
-        plt.xticks(size=plt_size["xtick"])
-        plt.yticks(size=plt_size["ytick"])
-
-        # --- legend
-        plt.legend(
-            fontsize=plt_size["legend"],
-            bbox_to_anchor=(0, 1.02, 1, 0.2),
-            ncol=2,
-            borderaxespad=0,
-            loc="lower center",
-        )
-
-        # --- x/y range
-        if plt_xrange is not None:
-            plt.xlim(plt_xrange[0], plt_xrange[1])
-        if plt_yrange is not None:
-            plt.ylim(plt_yrange[0], plt_yrange[1])
-
-        plt.grid()
-        plt.show()
 
     def _initialize_model(
         self,
@@ -1464,80 +275,1149 @@ Use ``add_loss_fn`` to define one."
         self.input_size = input_size
         self.is_inception = is_inception
 
-    def show_sample(
+    def generate_layerwise_lrs(
         self,
-        set_name: str | None = "train",
-        batch_number: int | None = 1,
-        print_batch_info: bool | None = True,
-        figsize: tuple[int, int] | None = (15, 10),
-    ):
+        min_lr: float,
+        max_lr: float,
+        spacing: str | None = "linspace",
+    ) -> list[dict]:
         """
-        Displays a sample of training or validation data in a grid format with
-        their corresponding class labels.
+        Calculates layer-wise learning rates for a given set of model
+        parameters.
 
         Parameters
         ----------
-        set_name : str, optional
-            Name of the dataset (``"train"``/``"validation"``) to display the
-            sample from, by default ``"train"``.
-        batch_number : int, optional
-            Which batch to display, by default ``1``.
-        print_batch_info : bool, optional
-            Whether to print information about the batch size, by default
-            ``True``.
-        figsize : tuple, optional
-            Figure size (width, height) in inches, by default ``(15, 10)``.
+        min_lr : float
+            The minimum learning rate to be used.
+        max_lr : float
+            The maximum learning rate to be used.
+        spacing : str, optional
+            The type of sequence to use for spacing the specified interval
+            learning rates. Can be either ``"linspace"`` or ``"geomspace"``,
+            where `"linspace"` uses evenly spaced learning rates over a
+            specified interval and `"geomspace"` uses learning rates spaced
+            evenly on a log scale (a geometric progression). By default ``"linspace"``.
+
+        Returns
+        -------
+        list of dicts
+            A list of dictionaries containing the parameters and learning
+            rates for each layer.
+        """
+
+        if spacing.lower() not in ["linspace", "geomspace"]:
+            raise NotImplementedError(
+                '[ERROR] ``spacing`` must be one of "linspace" or "geomspace"'
+            )
+
+        if spacing.lower() == "linspace":
+            lrs = np.linspace(min_lr, max_lr, len(list(self.model.named_parameters())))
+        elif spacing.lower() in ["log", "geomspace"]:
+            lrs = np.geomspace(min_lr, max_lr, len(list(self.model.named_parameters())))
+        params2optimize = [
+            {"params": params, "learning rate": lr}
+            for (_, params), lr in zip(self.model.named_parameters(), lrs)
+        ]
+
+        return params2optimize
+
+    def initialize_optimizer(
+        self,
+        optim_type: str = "adam",
+        params2optimize: str | Iterable = "default",
+        optim_param_dict: dict | None = None,
+    ):
+        """
+        Initializes an optimizer for the model and adds it to the classifier
+        object.
+
+        Parameters
+        ----------
+        optim_type : str, optional
+            The type of optimizer to use. Can be set to ``"adam"`` (default),
+            ``"adamw"``, or ``"sgd"``.
+        params2optimize : str or iterable, optional
+            The parameters to optimize. If set to ``"default"``, all model
+            parameters that require gradients will be optimized.
+            Default is ``"default"``.
+        optim_param_dict : dict, optional
+            The parameters to pass to the optimizer constructor as a
+            dictionary, by default ``{"lr": 1e-3}``.
+
+        Notes
+        -----
+        Note that the first argument of an optimizer is parameters to optimize,
+        e.g. ``params2optimize = model_ft.parameters()``:
+
+        - ``model_ft.parameters()``: all parameters are being optimized
+        - ``model_ft.fc.parameters()``: only parameters of final layer are being optimized
+
+        Here, we use:
+
+        .. code-block:: python
+
+            filter(lambda p: p.requires_grad, self.model.parameters())
+        """
+        if optim_param_dict is None:
+            optim_param_dict = {"lr": 0.001}
+        if params2optimize == "default":
+            params2optimize = filter(lambda p: p.requires_grad, self.model.parameters())
+
+        if optim_type.lower() in ["adam"]:
+            optimizer = optim.Adam(params2optimize, **optim_param_dict)
+        elif optim_type.lower() in ["adamw"]:
+            optimizer = optim.AdamW(params2optimize, **optim_param_dict)
+        elif optim_type.lower() in ["sgd"]:
+            optimizer = optim.SGD(params2optimize, **optim_param_dict)
+        else:
+            raise NotImplementedError(
+                '[ERROR] At present, only Adam ("adam"), AdamW ("adamw") and SGD ("sgd") are options for ``optim_type``.'
+            )
+
+        self.add_optimizer(optimizer)
+
+    def add_optimizer(self, optimizer: torch.optim.Optimizer) -> None:
+        """
+        Add an optimizer to the classifier object.
+
+        Parameters
+        ----------
+        optimizer : torch.optim.Optimizer
+            The optimizer to add to the classifier object.
 
         Returns
         -------
         None
-            Displays the sample images with their corresponding class labels.
+        """
+        self.optimizer = optimizer
+
+    def initialize_scheduler(
+        self,
+        scheduler_type: str = "steplr",
+        scheduler_param_dict: dict | None = None,
+    ):
+        """
+        Initializes a learning rate scheduler for the optimizer and adds it to
+        the classifier object.
+        Only `StepLR` is implemented - otherwise use `torch.optim.lr_scheduler` directly and the `add_scheduler` method.
+
+        Parameters
+        ----------
+        scheduler_type : str, optional
+            The type of learning rate scheduler to use. Default is ``"steplr"``.
+        scheduler_param_dict : dict, optional
+            The parameters to pass to the scheduler constructor, by default
+            ``{"step_size": 10, "gamma": 0.1}``.
 
         Raises
         ------
-        StopIteration
-            If the specified number of batches to display exceeds the total
-            number of batches in the dataset.
+        ValueError
+            If the specified ``scheduler_type`` is not implemented.
+        """
+        if self.optimizer is None:
+            raise ValueError(
+                "[ERROR] Optimizer is not yet defined. \n\n\
+Use ``initialize_optimizer`` or ``add_optimizer`` to define one."  # noqa
+            )
+
+        if scheduler_type.lower() == "steplr":
+            if scheduler_param_dict is None:
+                scheduler_param_dict = {"step_size": 10, "gamma": 0.1}
+            scheduler = optim.lr_scheduler.StepLR(
+                self.optimizer, **scheduler_param_dict
+            )
+        else:
+            raise NotImplementedError(
+                '[ERROR] At present, only StepLR ("steplr") is implemented. \n\n\
+Use ``torch.optim.lr_scheduler`` directly and then the ``add_scheduler`` method for other schedulers.'  # noqa
+            )
+
+        self.add_scheduler(scheduler)
+
+    def add_scheduler(self, scheduler: torch.optim.lr_scheduler._LRScheduler) -> None:
+        """
+        Add a scheduler to the classifier object.
+        Note that during training, `scheduler.step()` is called after each epoch - i.e. do not use schedulers that should be stepped after each batch!
+
+        Parameters
+        ----------
+        scheduler : torch.optim.lr_scheduler._LRScheduler
+            The scheduler to add to the classifier object.
+
+        Raises
+        ------
+        ValueError
+            If no optimizer has been set. Use ``initialize_optimizer`` or
+            ``add_optimizer`` to set an optimizer first.
+
+        Returns
+        -------
+        None
+        """
+        if self.optimizer is None:
+            raise ValueError(
+                "[ERROR] Optimizer is needed first. Use `initialize_optimizer` or `add_optimizer`"  # noqa
+            )
+
+        self.scheduler = scheduler
+
+    def add_loss_fn(
+        self, loss_fn: str | nn.modules.loss._Loss = "cross entropy"
+    ) -> None:
+        """
+        Add a loss function to the classifier object.
+
+        Parameters
+        ----------
+        loss_fn : str or torch.nn.modules.loss._Loss
+            The loss function to add to the classifier object.
+            Accepted string values are "cross entropy" or "ce" (cross-entropy), "bce" (binary cross-entropy) and "mse" (mean squared error).
+
+        Returns
+        -------
+        None
+            The function only modifies the ``loss_fn`` attribute of the
+            classifier and does not return anything.
+        """
+        if isinstance(loss_fn, str):
+            if loss_fn in ["cross entropy", "ce", "cross_entropy", "cross-entropy"]:
+                loss_fn = nn.CrossEntropyLoss()
+            elif loss_fn in [
+                "bce",
+                "binary_cross_entropy",
+                "binary cross entropy",
+                "binary cross-entropy",
+            ]:
+                loss_fn = nn.BCELoss()
+            elif loss_fn in [
+                "mse",
+                "mean_square_error",
+                "mean_squared_error",
+                "mean squared error",
+            ]:
+                loss_fn = nn.MSELoss()
+            else:
+                raise NotImplementedError(
+                    '[ERROR] At present, if passing ``loss_fn`` as a string, the loss function can only be "cross entropy" or "ce" (cross-entropy), "bce" (binary cross-entropy) or "mse" (mean squared error).'
+                )
+
+            print(f'[INFO] Using "{loss_fn}" as loss function.')
+
+        elif not isinstance(loss_fn, nn.modules.loss._Loss):
+            raise ValueError(
+                '[ERROR] Please pass ``loss_fn`` as a string ("cross entropy", "bce" or "mse") or torch.nn loss function (see https://pytorch.org/docs/stable/nn.html).'
+            )
+
+        self.loss_fn = loss_fn
+
+    def model_summary(
+        self,
+        input_size: tuple | list | None = None,
+        trainable_col: bool = False,
+        **kwargs,
+    ) -> None:
+        """
+        Print a summary of the model.
+
+        Parameters
+        ----------
+        input_size : tuple or list, optional
+            The size of the input data.
+            If None, input size is taken from "train" dataloader (``self.dataloaders["train"]``).
+        trainable_col : bool, optional
+            If ``True``, adds a column showing which parameters are trainable.
+            Defaults to ``False``.
+        **kwargs : Dict
+            Keyword arguments to pass to ``torchinfo.summary()`` (see https://github.com/TylerYep/torchinfo).
 
         Notes
         -----
-        This method uses the dataloader of the ``ImageClassifierData`` class
-        and the :func:`torchvision.utils.make_grid` function to display the
-        sample data in a grid format. It also calls the ``_imshow`` method of
-        the ``ImageClassifierData`` class to show the sample data.
+        Other ways to check params:
+
+        .. code-block:: python
+
+            sum(p.numel() for p in myclassifier.model.parameters())
+
+        .. code-block:: python
+
+            sum(p.numel() for p in myclassifier.model.parameters()
+                if p.requires_grad)
+
+        And:
+
+        .. code-block:: python
+
+            for name, param in self.model.named_parameters():
+                n = name.split(".")[0].split("_")[0]
+                print(name, param.requires_grad)
         """
-        if set_name not in self.dataloaders.keys():
+        if not input_size:
+            if "train" in self.dataloaders.keys():
+                batch_size = self.dataloaders["train"].batch_size
+                channels = len(self.dataloaders["train"].dataset.image_mode)
+                input_size = (batch_size, channels, *self.input_size)
+            else:
+                raise ValueError("[ERROR] Please pass an input size.")
+
+        if trainable_col:
+            col_names = ["num_params", "output_size", "trainable"]
+        else:
+            col_names = ["output_size", "output_size", "num_params"]
+
+        model_summary = summary(
+            self.model, input_size=input_size, col_names=col_names, **kwargs
+        )
+        print(model_summary)
+
+    def freeze_layers(self, layers_to_freeze: list[str]) -> None:
+        """
+        Freezes the specified layers in the neural network by setting
+        ``requires_grad`` attribute to False for their parameters.
+
+        Parameters
+        ----------
+        layers_to_freeze : list of str
+            List of names of the layers to freeze.
+            If a layer name ends with an asterisk (``"*"``), then all parameters whose name contains the layer name (excluding the asterisk) are frozen. Otherwise, only the parameters with an exact match to the layer name are frozen.
+
+        Returns
+        -------
+        None
+            The function only modifies the ``requires_grad`` attribute of the
+            specified parameters and does not return anything.
+
+        Notes
+        -----
+        e.g. ["layer1*", "layer2*"] will freeze all parameters whose name contains "layer1" and "layer2" (excluding the asterisk).
+        e.g. ["layer1", "layer2"] will freeze all parameters with an exact match to "layer1" and "layer2".
+        """
+        if not isinstance(layers_to_freeze, list):
             raise ValueError(
-                f"[ERROR] ``set_name`` must be one of {list(self.dataloaders.keys())}."
+                '[ERROR] ``layers_to_freeze`` must be a list of strings. E.g. ["layer1*", "layer2*"].'
             )
 
-        if print_batch_info:
-            # print info about batch size
-            self.print_batch_info(set_name)
+        for layer in layers_to_freeze:
+            for name, param in self.model.named_parameters():
+                if (layer.endswith("*")) and (
+                    layer.strip("*") in name
+                ):  # if using asterix wildcard
+                    param.requires_grad = False
+                elif (not layer.endswith("*")) and (
+                    layer == name
+                ):  # if using exact match
+                    param.requires_grad = False
 
-        dataloader = self.dataloaders[set_name]
+    def unfreeze_layers(self, layers_to_unfreeze: list[str]):
+        """
+        Unfreezes the specified layers in the neural network by setting
+        ``requires_grad`` attribute to True for their parameters.
 
-        num_batches = int(np.ceil(len(dataloader.dataset) / dataloader.batch_size))
-        if min(num_batches, batch_number) != batch_number:
-            print(
-                f'[INFO] "{set_name}" only contains {num_batches}.\n\
-Output will show batch number {num_batches}.'
+        Parameters
+        ----------
+        layers_to_unfreeze : list of str
+            List of names of the layers to unfreeze.
+            If a layer name ends with an asterisk (``"*"``), then all parameters whose name contains the layer name (excluding the asterisk) are unfrozen. Otherwise, only the parameters with an exact match to the layer name are unfrozen.
+
+        Returns
+        -------
+        None
+            The function only modifies the ``requires_grad`` attribute of the
+            specified parameters and does not return anything.
+
+        Notes
+        -----
+        e.g. ["layer1*", "layer2*"] will unfreeze all parameters whose name contains "layer1" and "layer2" (excluding the asterisk).
+        e.g. ["layer1", "layer2"] will unfreeze all parameters with an exact match to "layer1" and "layer2".
+        """
+
+        if not isinstance(layers_to_unfreeze, list):
+            raise ValueError(
+                '[ERROR] ``layers_to_unfreeze`` must be a list of strings. E.g. ["layer1*", "layer2*"].'
             )
-            batch_number = num_batches
 
-        dl_iter = iter(dataloader)
-        for _ in range(batch_number):
-            # Get a batch of training data
-            inputs, labels, label_indices = next(dl_iter)
+        for layer in layers_to_unfreeze:
+            for name, param in self.model.named_parameters():
+                if (layer.endswith("*")) and (layer.strip("*") in name):
+                    param.requires_grad = True
+                elif (not layer.endswith("*")) and (layer == name):
+                    param.requires_grad = True
 
-        # Make a grid from batch
-        for input in inputs:
-            out = torchvision.utils.make_grid(input)
-            self._imshow(
-                out,
-                title=f"{labels}\n{label_indices.tolist()}",
-                figsize=figsize,
+    def only_keep_layers(self, only_keep_layers_list: list[str]) -> None:
+        """
+        Only keep the specified layers (``only_keep_layers_list``) for
+        gradient computation during the backpropagation.
+
+        Parameters
+        ----------
+        only_keep_layers_list : list
+            List of layer names to keep. All other layers will have their
+            gradient computation turned off.
+
+        Returns
+        -------
+        None
+            The function only modifies the ``requires_grad`` attribute of the
+            specified parameters and does not return anything.
+        """
+        if not isinstance(only_keep_layers_list, list):
+            raise ValueError(
+                '[ERROR] ``only_keep_layers_list`` must be a list of strings. E.g. ["layer1", "layer2"].'
             )
+
+        for name, param in self.model.named_parameters():
+            if name in only_keep_layers_list:
+                param.requires_grad = True
+            else:
+                param.requires_grad = False
+
+    def inference(
+        self,
+        set_name: str = "infer",
+        verbose: bool = False,
+        print_info_batch_freq: int = 5,
+    ):
+        """
+        Run inference on a specified dataset (``set_name``).
+
+        Parameters
+        ----------
+        set_name : str, optional
+            The name of the dataset to run inference on, by default
+            ``"infer"``.
+        verbose : bool, optional
+            Whether to print verbose outputs, by default False.
+        print_info_batch_freq : int, optional
+            The frequency of printouts, by default ``5``.
+
+        Returns
+        -------
+        None
+
+        Notes
+        -----
+        This method calls the
+        :meth:`~.train.classifier.classifier.train` method with the
+        ``num_epochs`` set to ``1`` and all the other parameters specified in
+        the function arguments.
+        """
+        self.train(
+            phases=[set_name],
+            num_epochs=1,
+            save_model_dir=None,
+            verbose=verbose,
+            tensorboard_path=None,
+            tmp_file_save_freq=2,
+            remove_after_load=False,
+            print_info_batch_freq=print_info_batch_freq,
+        )
+
+    def train_component_summary(self) -> None:
+        """
+        Print a summary of the optimizer, loss function, and trainable model
+        components.
+
+        Returns:
+        --------
+        None
+        """
+        divider = 20 * "="
+        print(divider)
+        print("* Optimizer:")
+        print(str(self.optimizer))
+        print(divider)
+        print("* Loss function:")
+        print(str(self.loss_fn))
+        print(divider)
+        print("* Model:")
+        self.model_summary(trainable_col=True)
+
+    def train(
+        self,
+        phases: list[str] | None = None,
+        num_epochs: int = 25,
+        save_model_dir: str | None = "models",
+        verbose: bool = False,
+        tensorboard_path: str | None = None,
+        tmp_file_save_freq: int | None = 2,
+        remove_after_load: bool = True,
+        print_info_batch_freq: int | None = 5,
+    ) -> None:
+        """
+        Train the model on the specified phases for a given number of epochs.
+
+        Wrapper function for
+        :meth:`~.train.classifier.classifier.train_core` method to
+        capture exceptions (``KeyboardInterrupt`` is the only supported
+        exception currently).
+
+        Parameters
+        ----------
+        phases : list of str, optional
+            The phases to run through during each training iteration. Default is
+            ``["train", "val"]``.
+        num_epochs : int, optional
+            The number of epochs to train the model for. Default is ``25``.
+        save_model_dir : str or None, optional
+            The directory to save the model in. Default is ``"models"``. If
+            set to ``None``, the model is not saved.
+        verbose : int, optional
+            Whether to print verbose outputs, by default ``False``.
+        tensorboard_path : str or None, optional
+            The path to the directory to save TensorBoard logs in. If set to
+            ``None``, no TensorBoard logs are saved. Default is ``None``.
+        tmp_file_save_freq : int, optional
+            The frequency (in epochs) to save a temporary file of the model.
+            Default is ``2``. If set to ``0`` or ``None``, no temporary file
+            is saved.
+        remove_after_load : bool, optional
+            Whether to remove the temporary file after loading it. Default is
+            ``True``.
+        print_info_batch_freq : int, optional
+            The frequency (in batches) to print training information. Default
+            is ``5``. If set to ``0`` or ``None``, no training information is
+            printed.
+
+        Returns
+        -------
+        None
+            The function saves the model to the ``save_model_dir`` directory,
+            and optionally to a temporary file. If interrupted with a
+            ``KeyboardInterrupt``, the function tries to load the temporary
+            file. If no temporary file is found, it continues without loading.
+
+        Notes
+        -----
+        Refer to the documentation of
+        :meth:`~.train.classifier.classifier.train_core` for more
+        information.
+        """
+
+        if phases is None:
+            phases = ["train", "val"]
+
+        try:
+            self.train_core(
+                phases,
+                num_epochs,
+                save_model_dir,
+                verbose,
+                tensorboard_path,
+                tmp_file_save_freq,
+                print_info_batch_freq=print_info_batch_freq,
+            )
+        except KeyboardInterrupt:
+            print("[INFO] Exiting...")
+            if os.path.isfile(self.tmp_save_filename):
+                print(f'[INFO] Loading "{self.tmp_save_filename}" as model.')
+                self.load(self.tmp_save_filename, remove_after_load=remove_after_load)
+            else:
+                print("[INFO] No checkpoint file found - model has not been updated.")
+
+    def train_core(
+        self,
+        phases: list[str] | None = None,
+        num_epochs: int | None = 25,
+        save_model_dir: str | None | None = "models",
+        verbose: bool = False,
+        tensorboard_path: str | None | None = None,
+        tmp_file_save_freq: int | None | None = 2,
+        print_info_batch_freq: int | None | None = 5,
+    ) -> None:
+        """
+        Trains/fine-tunes a classifier for the specified number of epochs on
+        the given phases using the specified hyperparameters.
+
+        Parameters
+        ----------
+        phases : list of str, optional
+            The phases to run through during each training iteration. Default is
+            ``["train", "val"]``.
+        num_epochs : int, optional
+            The number of epochs to train the model for. Default is ``25``.
+        save_model_dir : str or None, optional
+            The directory to save the model in. Default is ``"models"``. If
+            set to ``None``, the model is not saved.
+        verbose : bool, optional
+            Whether to print verbose outputs, by default ``False``.
+        tensorboard_path : str or None, optional
+            The path to the directory to save TensorBoard logs in. If set to
+            ``None``, no TensorBoard logs are saved. Default is ``None``.
+        tmp_file_save_freq : int, optional
+            The frequency (in epochs) to save a temporary file of the model.
+            Default is ``2``. If set to ``0`` or ``None``, no temporary file
+            is saved.
+        print_info_batch_freq : int, optional
+            The frequency (in batches) to print training information. Default
+            is ``5``. If set to ``0`` or ``None``, no training information is
+            printed.
+
+        Raises
+        ------
+        ValueError
+            If the loss function is not set. Use the
+            :meth:`~.classify.classifier.ClassifierContainer.add_loss_fn`
+            method to set the loss function.
+
+            If the optimizer is not set and the phase is "train". Use the
+            :meth:`~.classify.classifier.ClassifierContainer.initialize_optimizer`
+            or :meth:`~.classify.classifier.ClassifierContainer.add_optimizer`
+            method to set the optimizer.
+
+        KeyError
+            If the specified phase cannot be found in the keys of the object's
+            :attr:`~.classify.classifier.ClassifierContainer.dataloaders`
+            dictionary property.
+
+        Returns
+        -------
+        None
+        """
+
+        if phases is None:
+            phases = ["train", "val"]
+        print(f"[INFO] Each step will pass: {phases}.")
+
+        for phase in phases:
+            if phase not in self.dataloaders.keys():
+                raise KeyError(
+                    f'[ERROR] "{phase}" dataloader cannot be found in dataloaders.\n\
+    Valid options for ``phases`` argument are: {self.dataloaders.keys()}'  # noqa
+                )
+
+        if verbose:
+            self.train_component_summary()
+
+        since = time.time()
+
+        # initialize variables
+        train_phase_names = ["train", "training"]
+        valid_phase_names = ["val", "validation", "eval", "evaluation"]
+        best_model_wts = copy.deepcopy(self.model.state_dict())
+        self.pred_conf = []
+        self.pred_label_indices = []
+        self.gt_label_indices = []
+        if save_model_dir is not None:
+            save_model_dir = os.path.abspath(save_model_dir)
+
+        # Check if SummaryWriter (for tensorboard) can be imported
+        tboard_writer = None
+        if tensorboard_path is not None:
+            try:
+                from torch.utils.tensorboard import SummaryWriter
+
+                tboard_writer = SummaryWriter(tensorboard_path)
+            except ImportError:
+                print(
+                    "[WARNING] Could not import ``SummaryWriter`` from torch.utils.tensorboard"  # noqa
+                )
+                print("[WARNING] Continuing without tensorboard.")
+                tensorboard_path = None
+
+        start_epoch = self.last_epoch + 1
+        end_epoch = self.last_epoch + num_epochs
+
+        # --- Main train loop
+        for epoch in range(start_epoch, end_epoch + 1):
+            # --- loop, phases
+            for phase in phases:
+                if phase.lower() in train_phase_names:
+                    self.model.train()
+
+                    # check if optimizer, scheduler and loss_fn are defined
+                    if self.optimizer is None:
+                        raise ValueError(
+                            "[ERROR] An optimizer should be defined for training the model."
+                        )
+                    if self.scheduler is None:
+                        raise ValueError(
+                            "[ERROR] A scheduler should be defined for training the model."
+                        )
+                    if self.loss_fn is None:
+                        raise ValueError(
+                            "[ERROR] A loss function should be defined for training the model."
+                        )
+                else:
+                    self.model.eval()
+
+                # initialize vars with one epoch lifetime
+                running_loss = 0.0
+                running_pred_conf = []
+                running_pred_label_indices = []
+                running_gt_label_indices = []
+
+                phase_batch_size = self.dataloaders[phase].batch_size
+                total_input_counts = len(self.dataloaders[phase].dataset)
+
+                # --- loop, batches
+                for batch_idx, (inputs, _, gt_label_indices) in enumerate(
+                    self.dataloaders[phase]
+                ):
+                    inputs = tuple(input.to(self.device) for input in inputs)
+                    gt_label_indices = gt_label_indices.to(self.device)
+
+                    if self.optimizer:  # only if optimizer is defined
+                        self.optimizer.zero_grad()
+
+                    if phase.lower() in train_phase_names + valid_phase_names:
+                        # forward, track history if only in train
+                        with torch.set_grad_enabled(phase.lower() in train_phase_names):
+                            # Get model outputs and calculate loss
+                            # Special case for inception because in training,
+                            # it has an auxiliary output.
+                            #     In train mode we calculate the loss by
+                            #     summing the final output and the auxiliary
+                            #     output but in testing we only consider the
+                            #     final output.
+                            if self.is_inception and (
+                                phase.lower() in train_phase_names
+                            ):
+                                outputs, aux_outputs = self.model(*inputs)
+
+                                if not isinstance(outputs, torch.Tensor):
+                                    outputs = self._get_logits(outputs)
+                                if not isinstance(aux_outputs, torch.Tensor):
+                                    aux_outputs = self._get_logits(aux_outputs)
+
+                                loss1 = self.loss_fn(outputs, gt_label_indices)
+                                loss2 = self.loss_fn(aux_outputs, gt_label_indices)
+                                # https://discuss.pytorch.org/t/how-to-optimize-inception-model-with-auxiliary-classifiers/7958
+                                loss = loss1 + 0.4 * loss2  # calculate loss
+
+                            else:
+                                outputs = self.model(*inputs)
+
+                                if not isinstance(outputs, torch.Tensor):
+                                    outputs = self._get_logits(outputs)
+
+                                loss = self.loss_fn(
+                                    outputs, gt_label_indices
+                                )  # calculate loss
+
+                            _, pred_label_indices = torch.max(outputs, dim=1)
+
+                            # backward + optimize only if in training phase
+                            if phase.lower() in train_phase_names:
+                                loss.backward()
+                                self.optimizer.step()
+
+                        # XXX (why multiply?)
+                        running_loss += loss.item() * inputs[0].size(0)
+
+                    else:  # if not in train or valid phase
+                        outputs = self.model(*inputs)
+
+                        if not isinstance(outputs, torch.Tensor):
+                            outputs = self._get_logits(outputs)
+
+                        _, pred_label_indices = torch.max(outputs, dim=1)
+
+                    running_pred_conf.extend(
+                        torch.nn.functional.softmax(outputs, dim=1).cpu().tolist()
+                    )
+                    running_pred_label_indices.extend(pred_label_indices.cpu().tolist())
+                    running_gt_label_indices.extend(gt_label_indices.cpu().tolist())
+
+                    if batch_idx % print_info_batch_freq == 0:
+                        current_input_counts = min(
+                            total_input_counts,
+                            (batch_idx + 1) * phase_batch_size,
+                        )
+                        progress = current_input_counts / total_input_counts * 100.0
+                        progress_msg = f"{current_input_counts}/{total_input_counts} ({progress:5.1f}% )"  # noqa
+
+                        epoch_msg = f"{phase: <8} -- {epoch}/{end_epoch} -- "
+                        epoch_msg += f"{progress_msg: >20} -- "
+
+                        if phase.lower() in valid_phase_names:
+                            epoch_msg += f"Loss: {loss.data:.3f}"
+                            self.cprint("[INFO]", "dred", epoch_msg)
+                        elif phase.lower() in train_phase_names:
+                            epoch_msg += f"Loss: {loss.data:.3f}"
+                            self.cprint("[INFO]", "dgreen", epoch_msg)
+                        else:
+                            self.cprint("[INFO]", "dgreen", epoch_msg)
+                    # --- END: one batch
+
+                # scheduler, step after each epoch
+                if phase.lower() in train_phase_names and (self.scheduler is not None):
+                    self.scheduler.step()
+
+                if phase.lower() in train_phase_names + valid_phase_names:
+                    # --- collect statistics
+                    epoch_loss = running_loss / len(self.dataloaders[phase].dataset)
+                    self._add_metrics(phase, "loss", epoch_loss)
+
+                    if tboard_writer is not None:
+                        tboard_writer.add_scalar(
+                            f"loss/{phase}",
+                            epoch_loss,
+                            epoch,
+                        )
+
+                    # other metrics (precision/recall/F1)
+                    self.calculate_add_metrics(
+                        running_gt_label_indices,
+                        running_pred_label_indices,
+                        running_pred_conf,
+                        phase,
+                        epoch,
+                        tboard_writer,
+                    )
+
+                    epoch_msg = f"{phase: <8} -- {epoch}/{end_epoch} -- "
+                    epoch_msg = self._gen_epoch_msg(phase, epoch_msg)
+
+                    if phase.lower() in valid_phase_names:
+                        self.cprint("[INFO]", "dred", epoch_msg + "\n")
+                    else:
+                        self.cprint("[INFO]", "dgreen", epoch_msg)
+
+                # labels/confidence
+                self.pred_conf.extend(running_pred_conf)
+                self.pred_label_indices.extend(running_pred_label_indices)
+                self.gt_label_indices.extend(running_gt_label_indices)
+
+                # Update best_loss and _epoch?
+                if phase.lower() in valid_phase_names and epoch_loss < self.best_loss:
+                    self.best_loss = epoch_loss
+                    self.best_epoch = epoch
+                    best_model_wts = copy.deepcopy(self.model.state_dict())
+
+                if phase.lower() in valid_phase_names:
+                    if epoch % tmp_file_save_freq == 0:
+                        tmp_str = f'[INFO] Checkpoint file saved to "{self.tmp_save_filename}".'  # noqa
+                        print(
+                            self._print_colors["lgrey"]
+                            + tmp_str
+                            + self._print_colors["reset"]
+                        )
+                        self.last_epoch = epoch
+                        self.save(self.tmp_save_filename, force=True)
+
+        self.pred_label = [
+            self.labels_map.get(i, None) for i in self.pred_label_indices
+        ]
+
+        time_elapsed = time.time() - since
+        print(f"[INFO] Total time: {time_elapsed // 60:.0f}m {time_elapsed % 60:.0f}s")
+
+        # load best model weights
+        self.model.load_state_dict(best_model_wts)
+
+        # --- SAVE model/object
+        if phase.lower() in train_phase_names + valid_phase_names:
+            self.last_epoch = epoch
+            if save_model_dir is not None:
+                save_filename = f"checkpoint_{self.best_epoch}.pkl"
+                save_model_path = os.path.join(save_model_dir, save_filename)
+                self.save(save_model_path, force=True)
+                with open(os.path.join(save_model_dir, "info.txt"), "a+") as fio:
+                    fio.writelines(f"{save_filename},{self.best_loss:.5f}\n")
+
+                print(
+                    f"[INFO] Model at epoch {self.best_epoch} has least valid loss ({self.best_loss:.4f}) so will be saved.\n\
+[INFO] Path: {save_model_path}"
+                )
+
+    @staticmethod
+    def _get_logits(out):
+        try:
+            out = out.logits
+        except AttributeError as err:
+            raise AttributeError(err.message)
+        return out
+
+    def _gen_epoch_msg(self, phase: str, epoch_msg: str) -> str:
+        """
+        Generates a log message for an epoch during training or validation.
+        The message includes information about the loss, F-score, and recall
+        for a given phase (training or validation).
+
+        Parameters
+        ----------
+        phase : str
+            The training phase, either ``"train"`` or ``"val"``.
+        epoch_msg : str
+            The message string to be modified with the epoch metrics.
+
+        Returns
+        -------
+        epoch_msg : str
+            The updated message string with the epoch metrics.
+        """
+        loss = self.metrics[phase]["loss"][-1]
+        epoch_msg += f"Loss: {loss:.3f}; "
+
+        fscore = self.metrics[phase]["fscore_macro"][-1]
+        epoch_msg += f"F_macro: {fscore:.2f}; "
+
+        recall = self.metrics[phase]["recall_macro"][-1]
+        epoch_msg += f"R_macro: {recall:.2f}"
+
+        return epoch_msg
+
+    def calculate_add_metrics(
+        self,
+        y_true,
+        y_pred,
+        y_score,
+        phase: str,
+        epoch: int | None = -1,
+        tboard_writer=None,
+    ) -> None:
+        """
+        Calculate and add metrics to the classifier's metrics dictionary.
+
+        Parameters
+        ----------
+        y_true : 1d array-like of shape (n_samples,)
+            True binary labels or multiclass labels. Can be considered ground
+            truth or (correct) target values.
+
+        y_pred : 1d array-like of shape (n_samples,)
+            Predicted binary labels or multiclass labels. The estimated
+            targets as returned by a classifier.
+
+        y_score : array-like of shape (n_samples, n_classes)
+            Predicted probabilities for each class.
+
+        phase : str
+            Name of the current phase, typically ``"train"`` or ``"val"``. See
+            ``train`` function.
+
+        epoch : int, optional
+            Current epoch number. Default is ``-1``.
+
+        tboard_writer : object, optional
+            TensorBoard SummaryWriter object to write the metrics. Default is
+            ``None``.
+
+        Returns
+        -------
+        None
+
+        Notes
+        -----
+        This method uses both the
+        :func:`sklearn.metrics.precision_recall_fscore_support` and
+        :func:`sklearn.metrics.roc_auc_score` functions from ``scikit-learn``
+        to calculate the metrics for each average type (``"micro"``,
+        ``"macro"`` and ``"weighted"``). The results are then added to the
+        ``metrics`` dictionary. It also writes the metrics to the TensorBoard
+        SummaryWriter, if ``tboard_writer`` is not None.
+        """
+        # convert y_score to a numpy array:
+        if not isinstance(y_score, np.ndarray):
+            y_score = np.array(y_score)
+
+        for average in [None, "micro", "macro", "weighted"]:
+            precision, recall, fscore, support = precision_recall_fscore_support(
+                y_true, y_pred, average=average
+            )
+
+            if average is None:
+                for i in range(
+                    y_score.shape[1]
+                ):  # y_score.shape[1] represents the number of classes
+                    self._add_metrics(phase, f"precision_{i}", precision[i])
+                    self._add_metrics(phase, f"recall_{i}", recall[i])
+                    self._add_metrics(phase, f"fscore_{i}", fscore[i])
+                    self._add_metrics(phase, f"support_{i}", support[i])
+
+                    if tboard_writer is not None:
+                        tboard_writer.add_scalar(
+                            f"Precision/{phase}/binary_{i}",
+                            precision[i],
+                            epoch,
+                        )
+                        tboard_writer.add_scalar(
+                            f"Recall/{phase}/binary_{i}",
+                            recall[i],
+                            epoch,
+                        )
+                        tboard_writer.add_scalar(
+                            f"Fscore/{phase}/binary_{i}",
+                            fscore[i],
+                            epoch,
+                        )
+
+            else:  # for micro, macro, weighted
+                self._add_metrics(phase, f"precision_{average}", precision)
+                self._add_metrics(phase, f"recall_{average}", recall)
+                self._add_metrics(phase, f"fscore_{average}", fscore)
+                self._add_metrics(phase, f"support_{average}", support)
+
+                if tboard_writer is not None:
+                    tboard_writer.add_scalar(
+                        f"Precision/{phase}/{average}",
+                        precision,
+                        epoch,
+                    )
+                    tboard_writer.add_scalar(
+                        f"Recall/{phase}/{average}",
+                        recall,
+                        epoch,
+                    )
+                    tboard_writer.add_scalar(
+                        f"Fscore/{phase}/{average}",
+                        fscore,
+                        epoch,
+                    )
+
+                # --- compute ROC AUC
+                if y_score.shape[1] == 2:
+                    # ---- binary case
+                    # From scikit-learn:
+                    #     The probability estimates correspond to the probability
+                    #     of the class with the greater label, i.e.
+                    #     estimator.classes_[1] and thus
+                    #     estimator.predict_proba(X, y)[:, 1]
+                    roc_auc = roc_auc_score(y_true, y_score[:, 1], average=average)
+                elif y_score.shape[1] > 2:
+                    # ---- multiclass
+                    # In the multiclass case, it corresponds to an array of shape
+                    # (n_samples, n_classes)
+                    # ovr = One-vs-rest (OvR) multiclass strategy
+                    try:
+                        roc_auc = roc_auc_score(
+                            y_true, y_score, average=average, multi_class="ovr"
+                        )
+                    except:
+                        continue
+                else:
+                    continue
+                self._add_metrics(phase, f"rocauc_{average}", roc_auc)
+
+    def _add_metrics(
+        self, phase: str, metric: str, value: int | (float | (complex | np.number))
+    ) -> None:
+        """
+        Adds a metric value to a dictionary of metrics tracked during training.
+
+        Parameters
+        ----------
+        phase: str
+            The phase of the training (e.g., "train", "val") to which the
+            metric value corresponds.
+        metric : str
+            The name of the metric to add to the dictionary of metrics.
+        value : numeric
+            The metric value to add to the corresponding list of metric values.
+
+        Returns
+        -------
+        None
+
+        Notes
+        -----
+        If the key ``k`` does not exist in the dictionary of metrics, a new
+        key-value pair is created with ``k`` as the key and a new list
+        containing the value ``v`` as the value. If the key ``k`` already
+        exists in the dictionary of metrics, the value `v` is appended to the
+        list associated with the key ``k``.
+        """
+        if phase not in self.metrics.keys():
+            self.metrics[phase] = {}
+        if metric not in self.metrics[phase].keys():
+            self.metrics[phase][metric] = []
+
+        self.metrics[phase][metric].append(value)
+
+    def plot_metric(
+        self,
+        metrics: str | list[str],
+        phases: str | list[str] = "all",
+        colors: list[str] | None = None,
+        figsize: tuple[int, int] = (10, 5),
+        plt_yrange: tuple[float, float] | None = None,
+        plt_xrange: tuple[float, float] | None = None,
+    ):
+        """
+        Plot the metrics of the classifier object.
+
+        Parameters
+        ----------
+        metrics : str or list of str
+            A string of list of strings containing metric names to be plotted on the y-axis.
+        phases : str or list of str, optional
+            The phases for which the metric is to be plotted. Defaults to ``"all"``.
+        colors : list of str, optional
+            Colors to be used for the lines of each metric. Length must be at least the length of the number of phases being plotted (``phases``). If None, will use the default matplotlib colors. Defaults to ``None``.
+        figsize : tuple of int, optional
+            The size of the figure in inches. Defaults to ``(10, 5)``.
+        plt_yrange : tuple of float, optional
+            The range of values for the y-axis. Defaults to ``None``.
+        plt_xrange : tuple of float, optional
+            The range of values for the x-axis. Defaults to ``None``.
+        """
+        plt.figure(figsize=figsize)
+
+        if isinstance(metrics, str):
+            metrics = [metrics]
+        if not isinstance(metrics, list):
+            raise TypeError("`metrics` must be a string or a list of strings.")
+
+        # make list of colors iterable
+        if colors:
+            colors = iter(colors)
+
+        for metric_name in metrics:
+            if isinstance(phases, str):
+                if phases == "all":
+                    phases = [*self.metrics.keys()]
+                else:
+                    phases = [phases]
+            if not isinstance(phases, list):
+                raise TypeError("`phases` must be a string or a list of strings.")
+
+            for phase in phases:
+                if metric_name not in self.metrics[phase].keys():
+                    raise KeyError(
+                        f"Metric {metric_name} not found in {phase} metrics."
+                    )
+
+                # get color
+                if colors:
+                    color = next(colors)
+                else:
+                    color = plt.gca()._get_lines.get_next_color()
+
+                plt.plot(
+                    range(
+                        1, len(self.metrics[phase][metric_name]) + 1
+                    ),  # i.e. epochs, starting from 1
+                    self.metrics[phase][metric_name],
+                    label=f"{phase}_{metric_name}",
+                    color=color,
+                    linestyle="-",
+                    marker="o",
+                    linewidth=2,
+                )
+
+        # set labels and ticks
+        plt.xlabel("Epochs", size=24)
+        plt.gca().xaxis.set_major_locator(MaxNLocator(integer=True))
+        plt.ylabel(" | ".join(metrics), size=24)
+        plt.xticks(size=18)
+        plt.yticks(size=18)
+
+        # legend
+        plt.legend(
+            fontsize=18,
+            bbox_to_anchor=(0, 1.02, 1, 0.2),
+            ncol=2,
+            borderaxespad=0,
+            loc="lower center",
+        )
+
+        # x/y range
+        if plt_xrange is not None:
+            plt.xlim(plt_xrange[0], plt_xrange[1])
+        if plt_yrange is not None:
+            plt.ylim(plt_yrange[0], plt_yrange[1])
+
+        plt.grid()
+        plt.show()
 
     def print_batch_info(self, set_name: str | None = "train") -> None:
         """
@@ -1569,46 +1449,6 @@ Output will show batch number {num_batches}.'
         - batches:      {num_batches}"
         )
 
-    @staticmethod
-    def _imshow(
-        inp: np.ndarray,
-        title: str | None = None,
-        figsize: tuple[int, int] | None = (15, 10),
-    ) -> None:
-        """
-        Displays an image of a tensor using matplotlib.pyplot.
-
-        Parameters
-        ----------
-        inp : numpy.ndarray
-            Input image to be displayed.
-        title : str, optional
-            Title of the plot, default is ``None``.
-        figsize : tuple, optional
-            Figure size in inches as a tuple of (width, height), default is
-            ``(15, 10)``.
-
-        Returns
-        -------
-        None
-            Displays the image of the provided tensor.
-        """
-
-        inp = inp.numpy().transpose((1, 2, 0))
-        # XXX
-        # mean = np.array([0.485, 0.456, 0.406])
-        # std = np.array([0.229, 0.224, 0.225])
-        # inp = std * inp + mean
-
-        inp = np.clip(inp, 0, 1)
-        plt.figure(figsize=figsize)
-        plt.imshow(inp)
-        if title is not None:
-            plt.title(title)
-        plt.axis("off")
-        plt.pause(0.001)  # pause a bit so that plots are updated
-        plt.show()
-
     def show_inference_sample_results(
         self,
         label: str,
@@ -1619,7 +1459,7 @@ Output will show batch number {num_batches}.'
         figsize: tuple[int, int] | None = (15, 15),
     ) -> None:
         """
-        Shows a sample of the results of the inference.
+        Shows a sample of the results of the inference with current model.
 
         Parameters
         ----------
@@ -1658,8 +1498,9 @@ Output will show batch number {num_batches}.'
 
         counter = 0
         plt.figure(figsize=figsize)
+
         with torch.no_grad():
-            for inputs, _labels, label_indices in iter(self.dataloaders[set_name]):
+            for inputs, _, label_indices in iter(self.dataloaders[set_name]):
                 inputs = tuple(input.to(self.device) for input in inputs)
                 label_indices = label_indices.to(self.device)
 
@@ -1675,27 +1516,27 @@ Output will show batch number {num_batches}.'
                 label_index_dict = {v: k for k, v in self.labels_map.items()}
 
                 # go through images in batch
-                for j in range(len(preds)):
-                    predicted_index = int(preds[j])
+                for i, pred in enumerate(preds):
+                    predicted_index = int(pred)
                     if predicted_index != label_index_dict[label]:
                         continue
                     if (min_conf is not None) and (
-                        pred_conf[j][predicted_index] < min_conf
+                        pred_conf[i][predicted_index] < min_conf
                     ):
                         continue
                     if (max_conf is not None) and (
-                        pred_conf[j][predicted_index] > max_conf
+                        pred_conf[i][predicted_index] > max_conf
                     ):
                         continue
 
                     counter += 1
 
-                    conf_score = pred_conf[j][predicted_index]
+                    conf_score = pred_conf[i][predicted_index]
                     ax = plt.subplot(int(num_samples / 2.0), 3, counter)
                     ax.axis("off")
                     ax.set_title(f"{label} | {conf_score:.3f}")
 
-                    inp = inputs[0].cpu().data[j].numpy().transpose((1, 2, 0))
+                    inp = inputs[0].cpu().data[i].numpy().transpose((1, 2, 0))
                     inp = np.clip(inp, 0, 1)
                     plt.imshow(inp)
 

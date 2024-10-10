@@ -8,6 +8,7 @@ import matplotlib.patches as patches
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import xyzservices as xyz
 from PIL import Image
 from shapely import LineString, MultiPolygon, Polygon
 
@@ -196,8 +197,6 @@ class RecRunner(Runner):
         figsize: tuple | None = (10, 10),
         border_color: str | None = "r",
         text_color: str | None = "b",
-        image_width_resolution: int | None = None,
-        return_fig: bool = False,
     ) -> None:
         """Show the search results on an image.
 
@@ -210,16 +209,7 @@ class RecRunner(Runner):
         border_color : str | None, optional
             The color of the border of the polygons, by default "r"
         text_color : str | None, optional
-            The color of the text, by default "b"
-        image_width_resolution : int | None, optional
-            The maximum resolution of the image width, by default None
-        return_fig : bool, optional
-            Whether to return the figure, by default False
-
-        Returns
-        -------
-        fig
-            The matplotlib figure if `return_fig` is True.
+            The color of the text, by default "b".
 
         Raises
         ------
@@ -233,25 +223,21 @@ class RecRunner(Runner):
 
         img = Image.open(image_path)
 
-        # if image_width_resolution is specified, resize the image
-        if image_width_resolution:
-            new_width = int(image_width_resolution)
-            rescale_factor = new_width / img.width
-            new_height = int(img.height * rescale_factor)
-            img = img.resize((new_width, new_height), Image.LANCZOS)
-
-        fig = plt.figure(figsize=figsize)
-        ax = plt.gca()
+        fig, ax = plt.subplots(figsize=figsize)
+        ax.axis("off")
 
         # check if grayscale
         if len(img.getbands()) == 1:
             ax.imshow(img, cmap="gray", vmin=0, vmax=255, zorder=1)
         else:
             ax.imshow(img, zorder=1)
+        ax.set_title(parent_id)
 
         preds = self.search_results
 
         for instance in preds[parent_id]:
+            # Instance is:
+            # - [geometry, text, score] for det/rec
             polygon = np.array(instance[0].exterior.coords.xy)
             center = instance[0].centroid.coords.xy
             patch = patches.Polygon(polygon.T, edgecolor=border_color, facecolor="none")
@@ -260,30 +246,21 @@ class RecRunner(Runner):
                 center[0][0], center[1][0], instance[1], fontsize=8, color=text_color
             )
 
-        plt.axis("off")
-        plt.title(parent_id)
+        fig.show()
 
-        if return_fig:
-            return fig
+    def _get_geo_search_results(self):
+        """Convert search results to georeferenced search results.
 
-    def save_search_results_to_geojson(
-        self,
-        save_path: str | pathlib.Path,
-    ) -> None:
-        """Convert the search results to georeferenced search results and save them to a GeoJSON file.
-
-        Parameters
-        ----------
-        save_path : str | pathlib.Path
-            The path to save the GeoJSON file.
-
-        Raises
-        ------
-        ValueError
-            If no search results are found.
+        Returns
+        -------
+        dict
+            Dictionary containing georeferenced search results.
         """
-        if self.search_results == {}:
-            raise ValueError("[ERROR] No results to save!")
+        self.check_georeferencing()
+        if not self.georeferenced:
+            raise ValueError(
+                "[ERROR] Cannot convert to coordinates as parent_df does not have 'coordinates' column."
+            )
 
         geo_search_results = {}
 
@@ -310,6 +287,60 @@ class RecRunner(Runner):
                     geo_search_results[parent_id].append(
                         [parent_polygon_geo, crs, *instance[1:]]
                     )
+
+        return geo_search_results
+
+    def explore_search_results(
+        self,
+        parent_id: str,
+        xyz_url: str | None = None,
+        style_kwargs: dict | None = None,
+    ):
+        self.check_georeferencing()
+        if not self.georeferenced:
+            raise ValueError(
+                "[ERROR] This method only works for georeferenced results. Please ensure parent_df has 'coordinates' column and run `convert_to_coords` first."
+            )
+
+        if parent_id not in self.geo_predictions.keys():
+            raise ValueError(f"[ERROR] {parent_id} not found in geo predictions.")
+
+        if style_kwargs is None:
+            style_kwargs = {"fillOpacity": 0.2}
+
+        if xyz_url:
+            tiles = xyz.TileProvider(name=xyz_url, url=xyz_url, attribution=xyz_url)
+        else:
+            tiles = xyz.providers.OpenStreetMap.Mapnik
+
+        geo_search_results = self._get_geo_search_results()
+        geo_df = self._dict_to_dataframe(geo_search_results, geo=True, parent=True)
+
+        return geo_df[geo_df["image_id"] == parent_id].explore(
+            tiles=tiles,
+            style_kwds=style_kwargs,
+        )
+
+    def save_search_results_to_geojson(
+        self,
+        save_path: str | pathlib.Path,
+    ) -> None:
+        """Convert the search results to georeferenced search results and save them to a GeoJSON file.
+
+        Parameters
+        ----------
+        save_path : str | pathlib.Path
+            The path to save the GeoJSON file.
+
+        Raises
+        ------
+        ValueError
+            If no search results are found.
+        """
+        if self.search_results == {}:
+            raise ValueError("[ERROR] No results to save!")
+
+        geo_search_results = self._get_geo_search_results()
 
         geo_df = self._dict_to_dataframe(geo_search_results, geo=True, parent=True)
         geo_df.to_file(save_path, driver="GeoJSON", engine="pyogrio")
